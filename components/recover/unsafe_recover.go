@@ -4,11 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/google/btree"
+	"github.com/pingcap/tiup/pkg/cluster/spec"
 	"os/exec"
 	"strings"
 	"sync"
-
-	"github.com/pingcap/tiup/pkg/cluster/spec"
 
 	"github.com/iosmanthus/learner-recover/common"
 
@@ -17,20 +17,43 @@ import (
 
 type ResolveConflicts struct {
 	conflicts []*common.RegionState
+	index     *btree.BTree
 }
 
 func NewResolveConflicts() *ResolveConflicts {
-	return &ResolveConflicts{}
+	return &ResolveConflicts{index: btree.New(2)}
 }
 
 func (r *ResolveConflicts) ResolveConflicts(ctx context.Context, c *Config) error {
+	type Target struct {
+		DataDir string
+		IDs     []common.RegionId
+	}
+
+	conflicts := make(map[string]*Target)
 	for _, conflict := range r.conflicts {
+		target := fmt.Sprintf("%s@%s", c.User, conflict.Host)
+		if _, ok := conflicts[target]; !ok {
+			conflicts[target] = &Target{DataDir: conflict.DataDir}
+		}
+		conflicts[target].IDs = append(conflicts[target].IDs, conflict.RegionId)
+	}
+
+	for target, conflict := range conflicts {
+		s := ""
+		for i, id := range conflict.IDs {
+			if i == 0 {
+				s = fmt.Sprintf("%v", id)
+			} else {
+				s += fmt.Sprintf(",%v", id)
+			}
+		}
+
 		cmd := exec.CommandContext(ctx,
-			"ssh", "-p", fmt.Sprintf("%v", c.SSHPort), fmt.Sprintf("%s@%s", c.User, conflict.Host),
-			c.TiKVCtl.Dest, "--db", fmt.Sprintf("%s/db", conflict.DataDir), "tombstone", "--force", "-r", fmt.Sprintf("%v", conflict.RegionId))
+			"ssh", "-p", fmt.Sprintf("%v", c.SSHPort), target,
+			c.TiKVCtl.Dest, "--db", fmt.Sprintf("%s/db", conflict.DataDir), "tombstone", "--force", "-r", s)
 
 		_, err := common.Run(cmd)
-
 		if err != nil {
 			return err
 		}
@@ -38,37 +61,74 @@ func (r *ResolveConflicts) ResolveConflicts(ctx context.Context, c *Config) erro
 	return nil
 }
 
-func isOverlap(a *common.RegionState, b *common.RegionState) bool {
-	m, n := a.LocalState.Region.StartKey, a.LocalState.Region.EndKey
-	p, q := b.LocalState.Region.StartKey, b.LocalState.Region.EndKey
-	return (n == "" || strings.Compare(n, p) > 0) && (q == "" || strings.Compare(q, m) > 0)
+//func isOverlap(a *common.RegionState, b *common.RegionState) bool {
+//	m, n := a.LocalState.Region.StartKey, a.LocalState.Region.EndKey
+//	p, q := b.LocalState.Region.StartKey, b.LocalState.Region.EndKey
+//	return (n == "" || strings.Compare(n, p) > 0) && (q == "" || strings.Compare(q, m) > 0)
+//}
+
+type Item struct {
+	SortKey string
+	*common.RegionState
 }
 
-func (c *ResolveConflicts) Merge(a *common.RegionInfos, b *common.RegionInfos) *common.RegionInfos {
-	if len(a.StateMap) == 0 {
-		return b
+func (i *Item) Less(than btree.Item) bool {
+	v := than.(*Item)
+	return strings.Compare(i.SortKey, v.SortKey) >= 0
+}
+
+func (r *ResolveConflicts) Merge(_ *common.RegionInfos, b *common.RegionInfos) *common.RegionInfos {
+	if r.index.Len() == 0 {
+		for _, state := range b.StateMap {
+			r.index.ReplaceOrInsert(&Item{
+				SortKey:     state.LocalState.Region.StartKey,
+				RegionState: state,
+			})
+		}
+		return nil
 	}
 
-	info := common.NewRegionInfos()
-	for _, state := range a.StateMap {
-		for _, other := range b.StateMap {
-			if isOverlap(state, other) {
-				version1 := state.LocalState.Region.RegionEpoch.Version
-				version2 := other.LocalState.Region.RegionEpoch.Version
-				if version1 > version2 || (version1 == version2) && state.ApplyState.AppliedIndex >= other.ApplyState.AppliedIndex {
-					info.StateMap[state.RegionId] = state
-					c.conflicts = append(c.conflicts, other)
-				} else {
-					info.StateMap[other.RegionId] = other
-					c.conflicts = append(c.conflicts, state)
-				}
-			} else {
-				info.StateMap[state.RegionId] = state
-				info.StateMap[other.RegionId] = other
+	for _, state := range b.StateMap {
+		var other *Item
+		if state.LocalState.Region.EndKey == "" {
+			other = r.index.Min().(*Item)
+		} else {
+			item := &Item{
+				SortKey: state.LocalState.Region.EndKey,
 			}
+			r.index.AscendGreaterOrEqual(item, func(i btree.Item) bool {
+				other = i.(*Item)
+				return false
+			})
 		}
+
+		if other != nil &&
+			(other.LocalState.Region.EndKey == "" ||
+				strings.Compare(other.LocalState.Region.EndKey, state.LocalState.Region.StartKey) > 0) {
+			// resolve conflicts
+			version1 := state.LocalState.Region.RegionEpoch.Version
+			version2 := other.LocalState.Region.RegionEpoch.Version
+			if version1 > version2 ||
+				(version1 == version2 && state.ApplyState.AppliedIndex >= other.ApplyState.AppliedIndex) {
+
+				r.conflicts = append(r.conflicts, other.RegionState)
+				r.index.Delete(other)
+				r.index.ReplaceOrInsert(&Item{
+					SortKey:     state.LocalState.Region.StartKey,
+					RegionState: state,
+				})
+			} else {
+				r.conflicts = append(r.conflicts, state)
+			}
+		} else {
+			r.index.ReplaceOrInsert(&Item{
+				SortKey:     state.LocalState.Region.StartKey,
+				RegionState: state,
+			})
+		}
+
 	}
-	return info
+	return nil
 }
 
 func (r *ClusterRescuer) dropLogs(ctx context.Context) error {
@@ -87,10 +147,11 @@ func (r *ClusterRescuer) dropLogs(ctx context.Context) error {
 		go func(node *spec.TiKVSpec) {
 			defer wg.Done()
 
-			log.Infof("Dropping raft logs of TiKV server on %s:%v", node.Host, node.Port)
+			path := fmt.Sprintf("%s/%s/db", node.DeployDir, node.DataDir)
+			log.Infof("Dropping raft logs of TiKV server on %s:%v:%s", node.Host, node.Port, path)
 			cmd := exec.CommandContext(ctx,
 				"ssh", "-p", fmt.Sprintf("%v", config.SSHPort), fmt.Sprintf("%s@%s", config.User, node.Host),
-				config.TiKVCtl.Dest, "--db", fmt.Sprintf("%s/db", node.DataDir), "unsafe-recover", "drop-unapplied-raftlog", "--all-regions")
+				config.TiKVCtl.Dest, "--db", path, "unsafe-recover", "drop-unapplied-raftlog", "--all-regions")
 			_, err := common.Run(cmd)
 			ch <- err
 		}(node)
@@ -133,9 +194,10 @@ func (r *ClusterRescuer) promoteLearner(ctx context.Context) error {
 				}
 			}
 
+			path := fmt.Sprintf("%s/%s/db", node.DeployDir, node.DataDir)
 			cmd := exec.CommandContext(ctx,
 				"ssh", "-p", fmt.Sprintf("%v", config.SSHPort), fmt.Sprintf("%s@%s", config.User, node.Host),
-				config.TiKVCtl.Dest, "--db", fmt.Sprintf("%s/db", node.DataDir), "unsafe-recover",
+				config.TiKVCtl.Dest, "--db", path, "unsafe-recover",
 				"remove-fail-stores", "--promote-learner", "--all-regions", "-s", stores)
 
 			_, err := common.Run(cmd)
@@ -162,6 +224,7 @@ type RemoteTiKVCtl struct {
 }
 
 func (c *RemoteTiKVCtl) Fetch(ctx context.Context) (*common.RegionInfos, error) {
+	log.Infof("fetching region infos from: %s", c.Host)
 	cmd := exec.CommandContext(ctx,
 		"ssh", "-p", fmt.Sprintf("%v", c.SSHPort), fmt.Sprintf("%s@%s", c.User, c.Host),
 		c.Controller, "--db", fmt.Sprintf("%s/db", c.DataDir), "raft", "region", "--all-regions")
@@ -181,6 +244,8 @@ func (c *RemoteTiKVCtl) Fetch(ctx context.Context) (*common.RegionInfos, error) 
 		infos.StateMap[id].DataDir = c.DataDir
 	}
 
+	log.Infof("[done] fetching region infos from: %s", c.Host)
+
 	return infos, nil
 }
 
@@ -198,7 +263,7 @@ func (r *ClusterRescuer) UnsafeRecover(ctx context.Context) error {
 	for _, node := range c.Nodes {
 		fetcher := &RemoteTiKVCtl{
 			Controller: c.TiKVCtl.Dest,
-			DataDir:    node.DataDir,
+			DataDir:    fmt.Sprintf("%s/%s", node.DeployDir, node.DataDir),
 			User:       c.User,
 			Host:       node.Host,
 			SSHPort:    c.SSHPort,
@@ -206,7 +271,7 @@ func (r *ClusterRescuer) UnsafeRecover(ctx context.Context) error {
 		fetchers = append(fetchers, fetcher)
 	}
 
-	log.Warn("resolving region conflicts")
+	log.Info("fetching region infos")
 	resolver := NewResolveConflicts()
 
 	_, err = collector.Collect(ctx, fetchers, resolver)
@@ -214,6 +279,7 @@ func (r *ClusterRescuer) UnsafeRecover(ctx context.Context) error {
 		return err
 	}
 
+	log.Warn("resolving region conflicts")
 	err = resolver.ResolveConflicts(ctx, c)
 	if err != nil {
 		return err

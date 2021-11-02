@@ -11,12 +11,12 @@ import (
 
 	"github.com/iosmanthus/learner-recover/common"
 
+	"github.com/go-resty/resty/v2"
 	"github.com/pingcap/tiup/pkg/cluster/spec"
 	prom "github.com/prometheus/client_golang/api"
 	promapi "github.com/prometheus/client_golang/api/prometheus/v1"
 	"github.com/prometheus/common/model"
 	log "github.com/sirupsen/logrus"
-	"gopkg.in/resty.v1"
 )
 
 type Fetcher interface {
@@ -68,7 +68,7 @@ func (g *getStores) UnmarshalJSON(data []byte) error {
 				Labels []struct {
 					Key   string `json:"key"`
 					Value string `json:"value"`
-				} `json:"learnerLabels"`
+				} `json:"labels"`
 			} `json:"store"`
 		} `json:"stores"`
 	}
