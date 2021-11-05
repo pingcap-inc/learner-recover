@@ -56,8 +56,8 @@ func NewConfig(path string) (*Config, error) {
 		return nil, err
 	}
 
-	topo := &spec.Specification{}
-	if err := spec.ParseTopologyYaml(c.OldTopology, topo); err != nil {
+	topo, err := common.ParseTiUPTopology(c.OldTopology)
+	if err != nil {
 		return nil, err
 	}
 
@@ -85,8 +85,8 @@ func NewConfig(path string) (*Config, error) {
 		return nil, errors.New("no TiKV nodes in the cluster, please check the topology file")
 	}
 
-	newTopo := &spec.Specification{}
-	if err := spec.ParseTopologyYaml(c.NewTopology, newTopo); err != nil {
+	newTopo, err := common.ParseTiUPTopology(c.NewTopology)
+	if err != nil {
 		return nil, err
 	}
 

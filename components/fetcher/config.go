@@ -1,6 +1,7 @@
 package fetcher
 
 import (
+	"github.com/iosmanthus/learner-recover/common"
 	"io/ioutil"
 	"time"
 
@@ -53,8 +54,8 @@ func NewConfig(path string) (*Config, error) {
 		return nil, err
 	}
 
-	topo := &spec.Specification{}
-	if err := spec.ParseTopologyYaml(c.Topology, topo); err != nil {
+	topo, err := common.ParseTiUPTopology(c.Topology)
+	if err != nil {
 		return nil, err
 	}
 

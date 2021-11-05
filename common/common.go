@@ -1,6 +1,7 @@
 package common
 
 import (
+	"github.com/pingcap/tiup/pkg/cluster/spec"
 	"os/exec"
 
 	log "github.com/sirupsen/logrus"
@@ -13,6 +14,16 @@ func IsLabelsMatch(labels map[string]string, match map[string]string) bool {
 		}
 	}
 	return true
+}
+
+func ParseTiUPTopology(path string) (*spec.Specification, error) {
+	topo := &spec.Specification{}
+	if err := spec.ParseTopologyYaml(path, topo); err != nil {
+		return nil, err
+	}
+	spec.ExpandRelativeDir(topo)
+
+	return topo, nil
 }
 
 func Run(cmd *exec.Cmd) (string, error) {

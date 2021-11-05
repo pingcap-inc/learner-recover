@@ -147,7 +147,7 @@ func (r *ClusterRescuer) dropLogs(ctx context.Context) error {
 		go func(node *spec.TiKVSpec) {
 			defer wg.Done()
 
-			path := fmt.Sprintf("%s/%s/db", node.DeployDir, node.DataDir)
+			path := fmt.Sprintf("%s/db", node.DataDir)
 			log.Infof("Dropping raft logs of TiKV server on %s:%v:%s", node.Host, node.Port, path)
 			cmd := exec.CommandContext(ctx,
 				"ssh", "-p", fmt.Sprintf("%v", config.SSHPort), fmt.Sprintf("%s@%s", config.User, node.Host),
@@ -194,7 +194,7 @@ func (r *ClusterRescuer) promoteLearner(ctx context.Context) error {
 				}
 			}
 
-			path := fmt.Sprintf("%s/%s/db", node.DeployDir, node.DataDir)
+			path := fmt.Sprintf("%s/db", node.DataDir)
 			cmd := exec.CommandContext(ctx,
 				"ssh", "-p", fmt.Sprintf("%v", config.SSHPort), fmt.Sprintf("%s@%s", config.User, node.Host),
 				config.TiKVCtl.Dest, "--db", path, "unsafe-recover",
@@ -263,7 +263,7 @@ func (r *ClusterRescuer) UnsafeRecover(ctx context.Context) error {
 	for _, node := range c.Nodes {
 		fetcher := &RemoteTiKVCtl{
 			Controller: c.TiKVCtl.Dest,
-			DataDir:    fmt.Sprintf("%s/%s", node.DeployDir, node.DataDir),
+			DataDir:    node.DataDir,
 			User:       c.User,
 			Host:       node.Host,
 			SSHPort:    c.SSHPort,

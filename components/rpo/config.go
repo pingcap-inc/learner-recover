@@ -8,7 +8,6 @@ import (
 
 	"github.com/iosmanthus/learner-recover/common"
 
-	"github.com/pingcap/tiup/pkg/cluster/spec"
 	"gopkg.in/yaml.v2"
 )
 
@@ -46,8 +45,8 @@ func NewConfig(path string) (*Config, error) {
 		return nil, err
 	}
 
-	topo := &spec.Specification{}
-	if err = spec.ParseTopologyYaml(c.Topology, topo); err != nil {
+	topo, err := common.ParseTiUPTopology(c.Topology)
+	if err != nil {
 		return nil, err
 	}
 

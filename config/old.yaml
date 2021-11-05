@@ -3,7 +3,7 @@ global:
   ssh_port: 22
 server_configs:
   pd:
-    replication.location-labels: ["zone", "host"]
+    replication.location-labels: [ "zone", "host" ]
 pd_servers:
   - host: 172.16.4.188
     deploy_dir: /root/deploy/pd
