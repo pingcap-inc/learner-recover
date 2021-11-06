@@ -175,7 +175,9 @@ func (r *ClusterRescuer) Finish(ctx context.Context) error {
 			"--offline", "--overwrite", "-R", "tikv")
 
 		_, err = common.Run(cmd)
-		log.Errorf("fail to patch TiKV cluster: %v", err)
+		if err != nil {
+			log.Errorf("fail to patch TiKV cluster: %v", err)
+		}
 
 		cmd = exec.CommandContext(ctx, "tiup", "cluster", "start", "-y", c.ClusterName)
 		_, err = common.Run(cmd)
