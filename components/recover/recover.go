@@ -117,15 +117,6 @@ func (r *ClusterRescuer) RebuildPD(ctx context.Context) error {
 	cmd := exec.CommandContext(ctx, "tiup", "cluster", "deploy", "-y", c.ClusterName, c.ClusterVersion, c.NewTopology.Path)
 	common.Run(cmd)
 
-	// tiup cluster patch <cluster-name> <package-path> [flags]
-	if c.Patch != "" {
-		cmd := exec.CommandContext(ctx, "tiup", "patch", c.ClusterName, c.Patch, "--offline", "--overwrite")
-		_, err := common.Run(cmd)
-		if err != nil {
-			return err
-		}
-	}
-
 	cmd = exec.CommandContext(ctx, "tiup", "cluster", "start", "-y", c.ClusterName)
 	_, err := common.Run(cmd)
 	if err != nil {
@@ -168,6 +159,20 @@ func (r *ClusterRescuer) Finish(ctx context.Context) error {
 	log.Info("Joining the TiKV servers")
 	cmd := exec.CommandContext(ctx, "tiup", "cluster", "scale-out", "-y", c.ClusterName, c.JoinTopology)
 	err := cmd.Run()
+
+	// tiup cluster patch <cluster-name> <package-path> [flags]
+	if c.Patch != "" {
+		log.Info("Patching TiKV servers")
+		cmd = exec.CommandContext(ctx, "tiup", "cluster", "stop", "-y", c.ClusterName)
+		err = cmd.Run()
+		if err != nil {
+			return err
+		}
+
+		cmd = exec.CommandContext(ctx, "tiup", "cluster", "patch", "-y", c.ClusterName, c.Patch, "--offline", "--overwrite")
+		_, err = common.Run(cmd)
+	}
+
 	return err
 }
 
