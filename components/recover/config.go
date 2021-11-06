@@ -13,6 +13,7 @@ import (
 
 type Config struct {
 	ClusterVersion string
+	Patch          string
 	ClusterName    string
 	User           string
 	SSHPort        int
@@ -33,6 +34,7 @@ type Config struct {
 func NewConfig(path string) (*Config, error) {
 	type _Config struct {
 		ClusterVersion  string            `yaml:"cluster-version"`
+		Patch           string            `yaml:"patch"`
 		ClusterName     string            `yaml:"cluster-name"`
 		OldTopology     string            `yaml:"old-topology"`
 		NewTopology     string            `yaml:"new-topology"`
@@ -92,6 +94,7 @@ func NewConfig(path string) (*Config, error) {
 
 	return &Config{
 		ClusterVersion: c.ClusterVersion,
+		Patch:          c.Patch,
 		ClusterName:    c.ClusterName,
 		User:           topo.GlobalOptions.User,
 		SSHPort:        topo.GlobalOptions.SSHPort,

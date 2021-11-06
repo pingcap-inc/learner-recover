@@ -117,6 +117,15 @@ func (r *ClusterRescuer) RebuildPD(ctx context.Context) error {
 	cmd := exec.CommandContext(ctx, "tiup", "cluster", "deploy", "-y", c.ClusterName, c.ClusterVersion, c.NewTopology.Path)
 	common.Run(cmd)
 
+	// tiup cluster patch <cluster-name> <package-path> [flags]
+	if c.Patch != "" {
+		cmd := exec.CommandContext(ctx, "tiup", "patch", c.ClusterName, c.Patch, "--offline", "--overwrite")
+		_, err := common.Run(cmd)
+		if err != nil {
+			return err
+		}
+	}
+
 	cmd = exec.CommandContext(ctx, "tiup", "cluster", "start", "-y", c.ClusterName)
 	_, err := common.Run(cmd)
 	if err != nil {
