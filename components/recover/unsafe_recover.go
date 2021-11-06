@@ -231,6 +231,7 @@ func (c *RemoteTiKVCtl) Fetch(ctx context.Context) (*common.RegionInfos, error) 
 
 	resp, err := cmd.Output()
 	if err != nil {
+		log.Errorf("fail to fetch region infos from %s: %v", c.Host, err)
 		return nil, err
 	}
 

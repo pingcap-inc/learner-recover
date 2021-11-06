@@ -160,16 +160,24 @@ func (r *ClusterRescuer) Finish(ctx context.Context) error {
 	cmd := exec.CommandContext(ctx, "tiup", "cluster", "scale-out", "-y", c.ClusterName, c.JoinTopology)
 	err := cmd.Run()
 
-	// tiup cluster patch <cluster-name> <package-path> [flags]
+	// Patch the cluster before finishing
 	if c.Patch != "" {
-		log.Info("Patching TiKV servers")
+		log.Info("Patching TiKV cluster")
 		cmd = exec.CommandContext(ctx, "tiup", "cluster", "stop", "-y", c.ClusterName)
 		err = cmd.Run()
 		if err != nil {
 			return err
 		}
 
-		cmd = exec.CommandContext(ctx, "tiup", "cluster", "patch", "-y", c.ClusterName, c.Patch, "--offline", "--overwrite", "-R", "tikv")
+		cmd = exec.CommandContext(ctx, "tiup", "cluster", "patch", "-y",
+			c.ClusterName,
+			c.Patch,
+			"--offline", "--overwrite", "-R", "tikv")
+
+		_, err = common.Run(cmd)
+		log.Errorf("fail to patch TiKV cluster: %v", err)
+
+		cmd = exec.CommandContext(ctx, "tiup", "cluster", "start", "-y", c.ClusterName)
 		_, err = common.Run(cmd)
 	}
 

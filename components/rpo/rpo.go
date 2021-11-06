@@ -103,6 +103,7 @@ func (f *LocalTiKVCtl) Fetch(ctx context.Context) (*common.RegionInfos, error) {
 	cmd := exec.CommandContext(ctx, f.controller, "--host", f.host, "raft", "region", "--all-regions")
 	resp, err := cmd.Output()
 	if err != nil {
+		log.Errorf("fail to fetch region infos from %s: %v", f.host, err)
 		return nil, err
 	}
 
