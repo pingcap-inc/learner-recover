@@ -169,7 +169,7 @@ func (r *ClusterRescuer) Finish(ctx context.Context) error {
 			return err
 		}
 
-		cmd = exec.CommandContext(ctx, "tiup", "cluster", "patch", "-y", c.ClusterName, c.Patch, "--offline", "--overwrite")
+		cmd = exec.CommandContext(ctx, "tiup", "cluster", "patch", "-y", c.ClusterName, c.Patch, "--offline", "--overwrite", "-R", "tikv")
 		_, err = common.Run(cmd)
 	}
 
