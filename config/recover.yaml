@@ -1,4 +1,5 @@
 cluster-version: v5.1.0
+patch: tikv-server.tar.gz
 cluster-name: iosmanthus-backup
 old-topology: config/old.yaml
 new-topology: config/new.yaml
@@ -10,3 +11,5 @@ tikv-ctl:
   src: bin/tikv-ctl
   dest: /root/tikv-ctl
 pd-recover-path: bin/pd-recover
+pd-ctl-commands:
+  - store limit all 500 add-peer
