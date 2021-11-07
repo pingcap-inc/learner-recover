@@ -22,6 +22,7 @@ type Config struct {
 		Path      string
 		PDServers []*spec.PDSpec
 	}
+	PDBootstrap     []string
 	JoinTopology    string
 	RecoverInfoFile *common.RecoverInfo
 	TiKVCtl         struct {
@@ -39,6 +40,7 @@ func NewConfig(path string) (*Config, error) {
 		OldTopology     string            `yaml:"old-topology"`
 		NewTopology     string            `yaml:"new-topology"`
 		JoinTopology    string            `yaml:"join-topology"`
+		PDBootstrap     []string          `yaml:"pd-ctl-commands"`
 		RecoverInfoFile string            `yaml:"recover-info-file"`
 		ZoneLabels      map[string]string `yaml:"zone-labels"`
 		TiKVCtl         struct {
@@ -105,6 +107,7 @@ func NewConfig(path string) (*Config, error) {
 		}{c.NewTopology, newTopo.PDServers},
 		JoinTopology:    c.JoinTopology,
 		RecoverInfoFile: info,
+		PDBootstrap:     c.PDBootstrap,
 		TiKVCtl: struct {
 			Src  string
 			Dest string

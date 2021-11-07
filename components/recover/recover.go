@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"os/exec"
+	"strings"
 	"sync"
 	"time"
 
@@ -135,22 +136,49 @@ func (r *ClusterRescuer) RebuildPD(ctx context.Context) error {
 	}
 
 	cmd = exec.CommandContext(ctx, "tiup", "cluster", "restart", "-y", c.ClusterName)
-	common.Run(cmd)
+	_, err = common.Run(cmd)
 
 	if err != nil {
 		return err
 	}
 
+	log.Info("Waiting PD server online")
+	waitForPDServerOnline(ctx, pdServer.Host, pdServer.ClientPort)
+
+	log.Info("Bootstrapping PD server")
+	return r.pdBootstrap(ctx)
+}
+
+func waitForPDServerOnline(ctx context.Context, host string, port int) {
 	client := resty.New()
 	for {
-		log.Info("Waiting PD server online")
-		resp, err := client.R().SetContext(ctx).Get(fmt.Sprintf("http://%s:%v/pd/api/v1/config/replicate", pdServer.Host, pdServer.ClientPort))
+		resp, err := client.R().SetContext(ctx).Get(fmt.Sprintf("http://%s:%v/pd/api/v1/config/replicate", host, port))
 		if err == nil && resp.StatusCode() == http.StatusOK {
 			break
 		}
 		time.Sleep(time.Second * 1)
 	}
+}
 
+func (r *ClusterRescuer) pdBootstrap(ctx context.Context) error {
+	c := r.config
+	pdServer := c.NewTopology.PDServers[0]
+
+	name := "tiup"
+	args := []string{
+		fmt.Sprintf("ctl:%s", c.ClusterVersion),
+		"pd",
+		"-u",
+		fmt.Sprintf("http://%s:%v", pdServer.Host, pdServer.ClientPort),
+	}
+	for _, config := range c.PDBootstrap {
+		extra := strings.Split(config, " ")
+		cmd := exec.CommandContext(ctx, name, append(args, extra...)...)
+		_, err := common.Run(cmd)
+		if err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
