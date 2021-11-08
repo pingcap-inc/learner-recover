@@ -4,11 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/google/btree"
-	"github.com/pingcap/tiup/pkg/cluster/spec"
 	"os/exec"
-	"strings"
+	"sort"
 	"sync"
+
+	"github.com/pingcap/tiup/pkg/cluster/spec"
 
 	"github.com/iosmanthus/learner-recover/common"
 
@@ -17,11 +17,11 @@ import (
 
 type ResolveConflicts struct {
 	conflicts []*common.RegionState
-	index     *btree.BTree
+	resolved  []*common.RegionState
 }
 
 func NewResolveConflicts() *ResolveConflicts {
-	return &ResolveConflicts{index: btree.New(2)}
+	return &ResolveConflicts{}
 }
 
 func (r *ResolveConflicts) ResolveConflicts(ctx context.Context, c *Config) error {
@@ -61,73 +61,68 @@ func (r *ResolveConflicts) ResolveConflicts(ctx context.Context, c *Config) erro
 	return nil
 }
 
-//func isOverlap(a *common.RegionState, b *common.RegionState) bool {
-//	m, n := a.LocalState.Region.StartKey, a.LocalState.Region.EndKey
-//	p, q := b.LocalState.Region.StartKey, b.LocalState.Region.EndKey
-//	return (n == "" || strings.Compare(n, p) > 0) && (q == "" || strings.Compare(q, m) > 0)
-//}
-
-type Item struct {
-	SortKey string
-	*common.RegionState
-}
-
-func (i *Item) Less(than btree.Item) bool {
-	v := than.(*Item)
-	return strings.Compare(i.SortKey, v.SortKey) >= 0
-}
-
 func (r *ResolveConflicts) Merge(_ *common.RegionInfos, b *common.RegionInfos) *common.RegionInfos {
-	if r.index.Len() == 0 {
-		for _, state := range b.StateMap {
-			r.index.ReplaceOrInsert(&Item{
-				SortKey:     state.LocalState.Region.StartKey,
-				RegionState: state,
-			})
-		}
-		return nil
-	}
+	toBeResolved := make([]*common.RegionState, 0)
+	newResolved := make([]*common.RegionState, 0)
 
 	for _, state := range b.StateMap {
-		var other *Item
-		if state.LocalState.Region.EndKey == "" {
-			other = r.index.Min().(*Item)
-		} else {
-			item := &Item{
-				SortKey: state.LocalState.Region.EndKey,
-			}
-			r.index.AscendGreaterOrEqual(item, func(i btree.Item) bool {
-				other = i.(*Item)
-				return false
-			})
-		}
-
-		if other != nil &&
-			(other.LocalState.Region.EndKey == "" ||
-				strings.Compare(other.LocalState.Region.EndKey, state.LocalState.Region.StartKey) > 0) {
-			// resolve conflicts
-			version1 := state.LocalState.Region.RegionEpoch.Version
-			version2 := other.LocalState.Region.RegionEpoch.Version
-			if version1 > version2 ||
-				(version1 == version2 && state.ApplyState.AppliedIndex >= other.ApplyState.AppliedIndex) {
-
-				r.conflicts = append(r.conflicts, other.RegionState)
-				r.index.Delete(other)
-				r.index.ReplaceOrInsert(&Item{
-					SortKey:     state.LocalState.Region.StartKey,
-					RegionState: state,
-				})
-			} else {
-				r.conflicts = append(r.conflicts, state)
-			}
-		} else {
-			r.index.ReplaceOrInsert(&Item{
-				SortKey:     state.LocalState.Region.StartKey,
-				RegionState: state,
-			})
-		}
-
+		toBeResolved = append(toBeResolved, state)
 	}
+
+	for {
+		hasConflict := false
+
+		for _, state := range toBeResolved {
+			var other *common.RegionState
+			otherIdx := -1
+			if len(r.resolved) != 0 {
+				if state.LocalState.Region.EndKey == "" {
+					other = r.resolved[len(r.resolved)-1]
+					otherIdx = len(r.resolved) - 1
+				} else {
+					i := sort.Search(len(r.resolved), func(i int) bool { return r.resolved[i].LocalState.Region.StartKey < state.LocalState.Region.EndKey })
+					if i < len(r.resolved) {
+						other = r.resolved[i]
+						otherIdx = i
+					}
+				}
+			}
+
+			if other != nil &&
+				(other.LocalState.Region.EndKey == "" ||
+					other.LocalState.Region.EndKey > state.LocalState.Region.StartKey) {
+				hasConflict = true
+				// resolve conflicts
+				version1 := state.LocalState.Region.RegionEpoch.Version
+				version2 := other.LocalState.Region.RegionEpoch.Version
+				if version1 > version2 ||
+					(version1 == version2 && state.ApplyState.AppliedIndex >= other.ApplyState.AppliedIndex) {
+
+					// remove from resolved
+					r.resolved = append(r.resolved[:otherIdx], r.resolved[otherIdx+1:]...)
+					newResolved = append(newResolved, state)
+					r.conflicts = append(r.conflicts, other)
+
+				} else {
+					r.conflicts = append(r.conflicts, state)
+				}
+			} else {
+				newResolved = append(newResolved, state)
+			}
+		}
+
+		if hasConflict {
+			toBeResolved = newResolved
+			newResolved = make([]*common.RegionState, 0)
+		} else {
+			r.resolved = append(r.resolved, newResolved...)
+			sort.SliceStable(r.resolved, func(i, j int) bool {
+				return r.resolved[i].LocalState.Region.StartKey > r.resolved[j].LocalState.Region.StartKey
+			})
+			break
+		}
+	}
+
 	return nil
 }
 
@@ -245,7 +240,7 @@ func (c *RemoteTiKVCtl) Fetch(ctx context.Context) (*common.RegionInfos, error) 
 		infos.StateMap[id].DataDir = c.DataDir
 	}
 
-	log.Infof("[done] fetching region infos from: %s", c.Host)
+	log.Infof("[完成] fetching region infos from: %s", c.Host)
 
 	return infos, nil
 }
