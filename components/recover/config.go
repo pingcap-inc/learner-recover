@@ -16,7 +16,6 @@ type Config struct {
 	Patch          string
 	ClusterName    string
 	User           string
-	SSHPort        int
 	Nodes          []*spec.TiKVSpec
 	NewTopology    struct {
 		Path      string
@@ -99,7 +98,6 @@ func NewConfig(path string) (*Config, error) {
 		Patch:          c.Patch,
 		ClusterName:    c.ClusterName,
 		User:           topo.GlobalOptions.User,
-		SSHPort:        topo.GlobalOptions.SSHPort,
 		Nodes:          nodes,
 		NewTopology: struct {
 			Path      string

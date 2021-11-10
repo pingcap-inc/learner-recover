@@ -22,6 +22,7 @@ tikv_servers:
     deploy_dir: /root/deploy/tikv
     data_dir: /root/data/tikv
     log_dir: "/root/deploy/tikv/log"
+    ssh_port: 3433
     config:
       server.labels:
         zone: master

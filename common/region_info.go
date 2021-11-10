@@ -47,6 +47,7 @@ func (r *RegionInfos) UnmarshalJSON(data []byte) error {
 type RegionState struct {
 	RegionId   RegionId `json:"region_id"`
 	Host       string
+	SSHPort    int
 	DataDir    string
 	ApplyState struct {
 		AppliedIndex uint64    `json:"applied_index"`

@@ -3,6 +3,7 @@ package recover
 import (
 	"context"
 	"fmt"
+	"github.com/pingcap/tiup/pkg/cluster/spec"
 	"net/http"
 	"os/exec"
 	"strings"
@@ -49,20 +50,20 @@ func (r *ClusterRescuer) Prepare(ctx context.Context) error {
 	defer wg.Wait()
 
 	for _, node := range config.Nodes {
-		go func(host string) {
+		go func(node *spec.TiKVSpec) {
 			defer wg.Done()
 
-			path := fmt.Sprintf("%s@%s:%s", config.User, host, config.TiKVCtl.Dest)
+			path := fmt.Sprintf("%s@%s:%s", config.User, node.Host, config.TiKVCtl.Dest)
 
-			log.Infof("Sending tikv-ctl to %s", host)
+			log.Infof("Sending tikv-ctl to %s", node.Host)
 			cmd := exec.CommandContext(ctx, "scp",
 				"-P",
-				fmt.Sprintf("%v", config.SSHPort),
+				fmt.Sprintf("%v", node.SSHPort),
 				config.TiKVCtl.Src,
 				path)
 			err := cmd.Run()
 			ch <- err
-		}(node.Host)
+		}(node)
 	}
 
 	for _, node := range config.Nodes {
@@ -88,16 +89,16 @@ func (r *ClusterRescuer) Stop(ctx context.Context) error {
 	defer wg.Wait()
 
 	for _, node := range config.Nodes {
-		go func(host string, port int) {
+		go func(node *spec.TiKVSpec) {
 			defer wg.Done()
 
-			log.Infof("Stoping TiKV server on %s:%v", host, port)
+			log.Infof("Stoping TiKV server on %s:%v", node.Host, node.Port)
 			cmd := exec.CommandContext(ctx,
-				"ssh", "-p", fmt.Sprintf("%v", config.SSHPort), fmt.Sprintf("%s@%s", config.User, host),
-				"sudo", "systemctl", "disable", "--now", fmt.Sprintf("tikv-%v.service", port))
+				"ssh", "-p", fmt.Sprintf("%v", node.SSHPort), fmt.Sprintf("%s@%s", config.User, node.Host),
+				"sudo", "systemctl", "disable", "--now", fmt.Sprintf("tikv-%v.service", node.Port))
 			err := cmd.Run()
 			ch <- err
-		}(node.Host, node.Port)
+		}(node)
 	}
 
 	for _, node := range config.Nodes {

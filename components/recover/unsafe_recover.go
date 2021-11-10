@@ -27,6 +27,7 @@ func NewResolveConflicts() *ResolveConflicts {
 func (r *ResolveConflicts) ResolveConflicts(ctx context.Context, c *Config) error {
 	type Target struct {
 		DataDir string
+		SSHPort int
 		IDs     []common.RegionId
 	}
 
@@ -34,7 +35,10 @@ func (r *ResolveConflicts) ResolveConflicts(ctx context.Context, c *Config) erro
 	for _, conflict := range r.conflicts {
 		target := fmt.Sprintf("%s@%s", c.User, conflict.Host)
 		if _, ok := conflicts[target]; !ok {
-			conflicts[target] = &Target{DataDir: conflict.DataDir}
+			conflicts[target] = &Target{
+				DataDir: conflict.DataDir,
+				SSHPort: conflict.SSHPort,
+			}
 		}
 		conflicts[target].IDs = append(conflicts[target].IDs, conflict.RegionId)
 	}
@@ -50,7 +54,7 @@ func (r *ResolveConflicts) ResolveConflicts(ctx context.Context, c *Config) erro
 		}
 
 		cmd := exec.CommandContext(ctx,
-			"ssh", "-p", fmt.Sprintf("%v", c.SSHPort), target,
+			"ssh", "-p", fmt.Sprintf("%v", conflict.SSHPort), target,
 			c.TiKVCtl.Dest, "--db", fmt.Sprintf("%s/db", conflict.DataDir), "tombstone", "--force", "-r", s)
 
 		_, err := common.Run(cmd)
@@ -145,7 +149,7 @@ func (r *ClusterRescuer) dropLogs(ctx context.Context) error {
 			path := fmt.Sprintf("%s/db", node.DataDir)
 			log.Infof("Dropping raft logs of TiKV server on %s:%v:%s", node.Host, node.Port, path)
 			cmd := exec.CommandContext(ctx,
-				"ssh", "-p", fmt.Sprintf("%v", config.SSHPort), fmt.Sprintf("%s@%s", config.User, node.Host),
+				"ssh", "-p", fmt.Sprintf("%v", node.SSHPort), fmt.Sprintf("%s@%s", config.User, node.Host),
 				config.TiKVCtl.Dest, "--db", path, "unsafe-recover", "drop-unapplied-raftlog", "--all-regions")
 			_, err := common.Run(cmd)
 			ch <- err
@@ -191,7 +195,7 @@ func (r *ClusterRescuer) promoteLearner(ctx context.Context) error {
 
 			path := fmt.Sprintf("%s/db", node.DataDir)
 			cmd := exec.CommandContext(ctx,
-				"ssh", "-p", fmt.Sprintf("%v", config.SSHPort), fmt.Sprintf("%s@%s", config.User, node.Host),
+				"ssh", "-p", fmt.Sprintf("%v", node.SSHPort), fmt.Sprintf("%s@%s", config.User, node.Host),
 				config.TiKVCtl.Dest, "--db", path, "unsafe-recover",
 				"remove-fail-stores", "--promote-learner", "--all-regions", "-s", stores)
 
@@ -238,6 +242,7 @@ func (c *RemoteTiKVCtl) Fetch(ctx context.Context) (*common.RegionInfos, error) 
 	for id := range infos.StateMap {
 		infos.StateMap[id].Host = c.Host
 		infos.StateMap[id].DataDir = c.DataDir
+		infos.StateMap[id].SSHPort = c.SSHPort
 	}
 
 	log.Infof("[DONE] fetching region infos from: %s", c.Host)
@@ -262,7 +267,7 @@ func (r *ClusterRescuer) UnsafeRecover(ctx context.Context) error {
 			DataDir:    node.DataDir,
 			User:       c.User,
 			Host:       node.Host,
-			SSHPort:    c.SSHPort,
+			SSHPort:    node.SSHPort,
 		}
 		fetchers = append(fetchers, fetcher)
 	}
