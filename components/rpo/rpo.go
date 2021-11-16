@@ -108,7 +108,7 @@ func (f *LocalTiKVCtl) Fetch(ctx context.Context) (*common.RegionInfos, error) {
 	applyTS := time.Now()
 
 	cmd := common.SSHCommand{
-		Port:         f.Port,
+		Port:         f.SSHPort,
 		User:         f.User,
 		Host:         f.Host,
 		ExtraSSHOpts: f.ExtraSSHOpts,
