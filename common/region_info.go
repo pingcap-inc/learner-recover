@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	log "github.com/sirupsen/logrus"
 	"time"
 )
 
@@ -88,19 +89,22 @@ func (f *RegionCollector) Collect(ctx context.Context, fetchers []Fetcher, m Agg
 	infos := NewRegionInfos()
 	for _, fetcher := range fetchers {
 		go func(fetcher Fetcher) {
-			i, err := fetcher.Fetch(ctx)
+			ctx, cancel := context.WithTimeout(ctx, time.Minute*1)
+			defer cancel()
+			info, err := fetcher.Fetch(ctx)
 			if err != nil {
+				log.Errorf("fail to fetch region info from: %v: %v", fetcher, err)
 				ch <- Result{Error: err}
 				return
 			}
-			ch <- Result{RegionInfos: i}
+			ch <- Result{RegionInfos: info}
 		}(fetcher)
 	}
 
 	for i := 0; i < len(fetchers); i++ {
 		result := <-ch
 		if err := result.Error; err != nil {
-			return nil, err
+			continue
 		}
 		infos = m.Merge(infos, result.RegionInfos)
 	}

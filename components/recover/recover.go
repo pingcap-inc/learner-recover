@@ -56,12 +56,15 @@ func (r *ClusterRescuer) Prepare(ctx context.Context) error {
 			path := fmt.Sprintf("%s@%s:%s", config.User, node.Host, config.TiKVCtl.Dest)
 
 			log.Infof("Sending tikv-ctl to %s", node.Host)
-			cmd := exec.CommandContext(ctx, "scp",
-				"-P",
-				fmt.Sprintf("%v", node.SSHPort),
-				config.TiKVCtl.Src,
-				path)
-			err := cmd.Run()
+			cmd := common.SCP{
+				Port:         node.SSHPort,
+				User:         config.User,
+				ExtraSSHOpts: config.ExtraSSHOpts,
+				Src:          []string{config.TiKVCtl.Src},
+				Dest:         path,
+			}
+
+			err := cmd.Run(ctx)
 			ch <- err
 		}(node)
 	}
@@ -93,10 +96,17 @@ func (r *ClusterRescuer) Stop(ctx context.Context) error {
 			defer wg.Done()
 
 			log.Infof("Stoping TiKV server on %s:%v", node.Host, node.Port)
-			cmd := exec.CommandContext(ctx,
-				"ssh", "-p", fmt.Sprintf("%v", node.SSHPort), fmt.Sprintf("%s@%s", config.User, node.Host),
-				"sudo", "systemctl", "disable", "--now", fmt.Sprintf("tikv-%v.service", node.Port))
-			err := cmd.Run()
+			cmd := common.SSHCommand{
+				Port:         node.SSHPort,
+				User:         config.User,
+				Host:         node.Host,
+				ExtraSSHOpts: config.ExtraSSHOpts,
+				CommandName:  "sudo",
+				Args: []string{
+					"systemctl", "disable", "--now", fmt.Sprintf("tikv-%v.service", node.Port),
+				},
+			}
+			_, err := cmd.Run(ctx)
 			ch <- err
 		}(node)
 	}
@@ -183,36 +193,92 @@ func (r *ClusterRescuer) pdBootstrap(ctx context.Context) error {
 	return nil
 }
 
+func (r *ClusterRescuer) patchCluster(ctx context.Context) error {
+	c := r.config
+	cmd := exec.CommandContext(ctx, "tiup", "cluster", "stop", "-y", c.ClusterName)
+	err := cmd.Run()
+	if err != nil {
+		return err
+	}
+
+	cmd = exec.CommandContext(ctx, "tiup", "cluster", "patch", "-y",
+		c.ClusterName,
+		c.Patch,
+		"--offline", "--overwrite", "-R", "tikv")
+
+	_, err = common.Run(cmd)
+	if err != nil {
+		log.Errorf("fail to patch TiKV cluster: %v", err)
+	}
+
+	cmd = exec.CommandContext(ctx, "tiup", "cluster", "start", "-y", c.ClusterName)
+	_, err = common.Run(cmd)
+	return err
+}
+
+func (r *ClusterRescuer) applyNewPlacementRule(ctx context.Context) error {
+	c := r.config
+	pdServer := c.NewTopology.PDServers[0]
+
+	name := "tiup"
+	args := []string{
+		fmt.Sprintf("ctl:%s", c.ClusterVersion),
+		"pd",
+		"-u",
+		fmt.Sprintf("http://%s:%v", pdServer.Host, pdServer.ClientPort),
+	}
+	cmd := exec.CommandContext(ctx, name, append(args, []string{
+		"config",
+		"placement-rules",
+		"enable",
+	}...)...)
+
+	err := cmd.Run()
+	if err != nil {
+		return err
+	}
+
+	cmd = exec.CommandContext(ctx, name, append(args, []string{
+		"config",
+		"placement-rules",
+		"set",
+		"pd",
+		fmt.Sprintf("--in=%s", c.NewPlacementRules),
+	}...)...)
+
+	return cmd.Run()
+}
+
+func (r *ClusterRescuer) joinTiKV(ctx context.Context) error {
+	c := r.config
+	cmd := exec.CommandContext(ctx, "tiup", "cluster", "scale-out", "-y", c.ClusterName, c.JoinTopology)
+	return cmd.Run()
+}
+
 func (r *ClusterRescuer) Finish(ctx context.Context) error {
 	c := r.config
+
 	log.Info("Joining the TiKV servers")
-	cmd := exec.CommandContext(ctx, "tiup", "cluster", "scale-out", "-y", c.ClusterName, c.JoinTopology)
-	err := cmd.Run()
+	if err := r.joinTiKV(ctx); err != nil {
+		return err
+	}
 
 	// Patch the cluster before finishing
 	if c.Patch != "" {
 		log.Info("Patching TiKV cluster")
-		cmd = exec.CommandContext(ctx, "tiup", "cluster", "stop", "-y", c.ClusterName)
-		err = cmd.Run()
-		if err != nil {
+		if err := r.patchCluster(ctx); err != nil {
 			return err
 		}
-
-		cmd = exec.CommandContext(ctx, "tiup", "cluster", "patch", "-y",
-			c.ClusterName,
-			c.Patch,
-			"--offline", "--overwrite", "-R", "tikv")
-
-		_, err = common.Run(cmd)
-		if err != nil {
-			log.Errorf("fail to patch TiKV cluster: %v", err)
-		}
-
-		cmd = exec.CommandContext(ctx, "tiup", "cluster", "start", "-y", c.ClusterName)
-		_, err = common.Run(cmd)
 	}
 
-	return err
+	if c.NewPlacementRules != "" {
+		log.Info("Apply placement rules")
+		if err := r.applyNewPlacementRule(ctx); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 func (r *ClusterRescuer) Execute(ctx context.Context) error {

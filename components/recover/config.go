@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io/ioutil"
+	"strings"
 
 	"github.com/iosmanthus/learner-recover/common"
 
@@ -16,15 +17,17 @@ type Config struct {
 	Patch          string
 	ClusterName    string
 	User           string
+	ExtraSSHOpts   []string
 	Nodes          []*spec.TiKVSpec
 	NewTopology    struct {
 		Path      string
 		PDServers []*spec.PDSpec
 	}
-	PDBootstrap     []string
-	JoinTopology    string
-	RecoverInfoFile *common.RecoverInfo
-	TiKVCtl         struct {
+	NewPlacementRules string
+	PDBootstrap       []string
+	JoinTopology      string
+	RecoverInfoFile   *common.RecoverInfo
+	TiKVCtl           struct {
 		Src  string
 		Dest string
 	}
@@ -33,16 +36,18 @@ type Config struct {
 
 func NewConfig(path string) (*Config, error) {
 	type _Config struct {
-		ClusterVersion  string            `yaml:"cluster-version"`
-		Patch           string            `yaml:"patch"`
-		ClusterName     string            `yaml:"cluster-name"`
-		OldTopology     string            `yaml:"old-topology"`
-		NewTopology     string            `yaml:"new-topology"`
-		JoinTopology    string            `yaml:"join-topology"`
-		PDBootstrap     []string          `yaml:"pd-ctl-commands"`
-		RecoverInfoFile string            `yaml:"recover-info-file"`
-		ZoneLabels      map[string]string `yaml:"zone-labels"`
-		TiKVCtl         struct {
+		ClusterVersion    string            `yaml:"cluster-version"`
+		ExtraSSHOpts      string            `yaml:"extra-ssh-opts"`
+		Patch             string            `yaml:"patch"`
+		ClusterName       string            `yaml:"cluster-name"`
+		OldTopology       string            `yaml:"old-topology"`
+		NewTopology       string            `yaml:"new-topology"`
+		JoinTopology      string            `yaml:"join-topology"`
+		NewPlacementRules string            `yaml:"new-placement-rules"`
+		PDBootstrap       []string          `yaml:"pd-ctl-commands"`
+		RecoverInfoFile   string            `yaml:"recover-info-file"`
+		ZoneLabels        map[string]string `yaml:"zone-labels"`
+		TiKVCtl           struct {
 			Src  string `yaml:"src"`
 			Dest string `yaml:"dest"`
 		} `yaml:"tikv-ctl"`
@@ -93,12 +98,16 @@ func NewConfig(path string) (*Config, error) {
 		return nil, err
 	}
 
+	sshArgs := strings.Split(c.ExtraSSHOpts, " ")
+
 	return &Config{
-		ClusterVersion: c.ClusterVersion,
-		Patch:          c.Patch,
-		ClusterName:    c.ClusterName,
-		User:           topo.GlobalOptions.User,
-		Nodes:          nodes,
+		ClusterVersion:    c.ClusterVersion,
+		Patch:             c.Patch,
+		ExtraSSHOpts:      sshArgs,
+		NewPlacementRules: c.NewPlacementRules,
+		ClusterName:       c.ClusterName,
+		User:              topo.GlobalOptions.User,
+		Nodes:             nodes,
 		NewTopology: struct {
 			Path      string
 			PDServers []*spec.PDSpec

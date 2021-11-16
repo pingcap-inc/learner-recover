@@ -2,32 +2,45 @@ package rpo
 
 import (
 	"errors"
-	"fmt"
+	"github.com/pingcap/tiup/pkg/cluster/spec"
 	"io/ioutil"
+	"strings"
 	"time"
 
 	"github.com/iosmanthus/learner-recover/common"
-
 	"gopkg.in/yaml.v2"
 )
 
 type Config struct {
-	Voters      []string
-	Learners    []string
-	TikvCtlPath string
-	HistoryPath string
-	Save        string
-	LastFor     time.Duration
+	Voters      []*spec.TiKVSpec
+	Learners    []*spec.TiKVSpec
+	TiKVCtlPath struct {
+		Src  string
+		Dest string
+	}
+	VoterBackoffDuration   time.Duration
+	LearnerBackoffDuration time.Duration
+	RemoteUser             string
+	HistoryPath            string
+	ExtraSSHOpts           []string
+	Save                   string
+	LastFor                time.Duration
 }
 
 func NewConfig(path string) (*Config, error) {
 	type _Config struct {
-		Topology      string            `yaml:"topology"`
-		LearnerLabels map[string]string `yaml:"learner-labels"`
-		TikvCtlPath   string            `yaml:"tikv-ctl"`
-		HistoryPath   string            `yaml:"history-path"`
-		Save          string            `yaml:"save"`
-		LastFor       string            `yaml:"last-for"`
+		Topology               string            `yaml:"topology"`
+		LearnerLabels          map[string]string `yaml:"learner-labels"`
+		VoterBackoffDuration   string            `yaml:"voter-backoff-duration"`
+		LearnerBackoffDuration string            `yaml:"learner-backoff-duration"`
+		TikvCtlPath            struct {
+			Src  string `yaml:"src"`
+			Dest string `yaml:"dest"`
+		} `yaml:"tikv-ctl"`
+		HistoryPath  string `yaml:"history-path"`
+		ExtraSSHOpts string `yaml:"extra-ssh-opts"`
+		Save         string `yaml:"save"`
+		LastFor      string `yaml:"last-for"`
 	}
 
 	data, err := ioutil.ReadFile(path)
@@ -45,14 +58,24 @@ func NewConfig(path string) (*Config, error) {
 		return nil, err
 	}
 
+	voterBackoffDuration, err := time.ParseDuration(c.VoterBackoffDuration)
+	if err != nil {
+		return nil, err
+	}
+
+	learnerBackoffDuration, err := time.ParseDuration(c.LearnerBackoffDuration)
+	if err != nil {
+		return nil, err
+	}
+
 	topo, err := common.ParseTiUPTopology(c.Topology)
 	if err != nil {
 		return nil, err
 	}
 
 	var (
-		voters   []string
-		learners []string
+		voters   []*spec.TiKVSpec
+		learners []*spec.TiKVSpec
 	)
 
 	for _, node := range topo.TiKVServers {
@@ -61,12 +84,10 @@ func NewConfig(path string) (*Config, error) {
 			return nil, err
 		}
 
-		host := fmt.Sprintf("%s:%v", node.Host, node.Port)
-
 		if common.IsLabelsMatch(c.LearnerLabels, serverLabels) {
-			learners = append(learners, host)
+			learners = append(learners, node)
 		} else {
-			voters = append(voters, host)
+			voters = append(voters, node)
 		}
 	}
 
@@ -77,12 +98,24 @@ func NewConfig(path string) (*Config, error) {
 		return nil, errors.New("no learners in the cluster, please check the topology file")
 	}
 
+	sshArgs := strings.Split(c.ExtraSSHOpts, " ")
+
 	return &Config{
-		Voters:      voters,
-		Learners:    learners,
-		TikvCtlPath: c.TikvCtlPath,
-		HistoryPath: c.HistoryPath,
-		Save:        c.Save,
-		LastFor:     lastFor,
+		Voters:                 voters,
+		Learners:               learners,
+		LearnerBackoffDuration: learnerBackoffDuration,
+		VoterBackoffDuration:   voterBackoffDuration,
+		TiKVCtlPath: struct {
+			Src  string
+			Dest string
+		}{
+			Src:  c.TikvCtlPath.Src,
+			Dest: c.TikvCtlPath.Dest,
+		},
+		RemoteUser:   topo.GlobalOptions.User,
+		ExtraSSHOpts: sshArgs,
+		HistoryPath:  c.HistoryPath,
+		Save:         c.Save,
+		LastFor:      lastFor,
 	}, nil
 }

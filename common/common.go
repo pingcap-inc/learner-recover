@@ -1,6 +1,8 @@
 package common
 
 import (
+	"context"
+	"fmt"
 	"github.com/pingcap/tiup/pkg/cluster/spec"
 	"os/exec"
 
@@ -37,4 +39,39 @@ func Run(cmd *exec.Cmd) (string, error) {
 	}
 
 	return out, err
+}
+
+type SSHCommand struct {
+	Port         int
+	User         string
+	Host         string
+	ExtraSSHOpts []string
+	CommandName  string
+	Args         []string
+}
+
+func (c *SSHCommand) Run(ctx context.Context) ([]byte, error) {
+	args := append([]string{"-p", fmt.Sprintf("%v", c.Port)}, append(c.ExtraSSHOpts, append([]string{
+		fmt.Sprintf("%s@%s", c.User, c.Host), c.CommandName,
+	}, c.Args...)...)...)
+	cmd := exec.CommandContext(ctx, "ssh", args...)
+
+	log.Infof("execute command: %s", cmd.String())
+
+	return cmd.Output()
+}
+
+type SCP struct {
+	Port         int
+	User         string
+	ExtraSSHOpts []string
+	Src          []string
+	Dest         string
+}
+
+func (s *SCP) Run(ctx context.Context) error {
+	args := append([]string{"-P", fmt.Sprintf("%v", s.Port)}, s.ExtraSSHOpts...)
+	cmd := exec.CommandContext(ctx, "scp", append(append(args, s.Src...), s.Dest)...)
+	log.Infof("execute command: %s", cmd.String())
+	return cmd.Run()
 }

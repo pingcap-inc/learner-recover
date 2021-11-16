@@ -25,8 +25,12 @@ var (
 			log.Warnf("Acquiring lock for %s", lock)
 			fileLock.Lock()
 			defer fileLock.Unlock()
-			gen := rpo.NewGenerator(c)
-			return gen.Gen(context.Background())
+			ctx := context.Background()
+			gen, err := rpo.NewGenerator(ctx, c)
+			if err != nil {
+				return err
+			}
+			return gen.Gen(ctx)
 		},
 	}
 )

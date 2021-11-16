@@ -3,12 +3,14 @@ package rpo
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io/ioutil"
-	"os/exec"
+	"sync"
 	"time"
 
 	"github.com/iosmanthus/learner-recover/common"
 
+	"github.com/pingcap/tiup/pkg/cluster/spec"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -90,20 +92,36 @@ func (m MaxApplyIndex) Merge(a *common.RegionInfos, b *common.RegionInfos) *comm
 }
 
 type LocalTiKVCtl struct {
-	controller string
-	host       string
+	Controller   string
+	ExtraSSHOpts []string
+	User         string
+	Host         string
+	Port         int
+	SSHPort      int
 }
 
-func NewLocalTiKVCtl(controller, host string) *LocalTiKVCtl {
-	return &LocalTiKVCtl{controller, host}
+func (f *LocalTiKVCtl) String() string {
+	return fmt.Sprintf("%s:%v", f.Host, f.Port)
 }
 
 func (f *LocalTiKVCtl) Fetch(ctx context.Context) (*common.RegionInfos, error) {
 	applyTS := time.Now()
-	cmd := exec.CommandContext(ctx, f.controller, "--host", f.host, "raft", "region", "--all-regions")
-	resp, err := cmd.Output()
+
+	cmd := common.SSHCommand{
+		Port:         f.Port,
+		User:         f.User,
+		Host:         f.Host,
+		ExtraSSHOpts: f.ExtraSSHOpts,
+		CommandName:  f.Controller,
+		Args: []string{
+			"--host", fmt.Sprintf("%s:%v", f.Host, f.Port),
+			"raft", "region", "--all-regions",
+		},
+	}
+
+	resp, err := cmd.Run(ctx)
 	if err != nil {
-		log.Errorf("fail to fetch region infos from %s: %v", f.host, err)
+		log.Errorf("fail to fetch region infos from %s: %v", f.Host, err)
 		return nil, err
 	}
 
@@ -120,13 +138,21 @@ func (f *LocalTiKVCtl) Fetch(ctx context.Context) (*common.RegionInfos, error) {
 }
 
 type UpdateWorker struct {
-	controller string
-	hosts      []string
-	interval   time.Duration
+	controller   string
+	remoteUser   string
+	extraSSHOpts []string
+	nodes        []*spec.TiKVSpec
+	interval     time.Duration
 }
 
-func NewUpdateWorker(controller string, hosts []string, interval time.Duration) *UpdateWorker {
-	return &UpdateWorker{controller, hosts, interval}
+func NewUpdateWorker(controller string, remoteUser string, extraSSHOpts []string, nodes []*spec.TiKVSpec, interval time.Duration) *UpdateWorker {
+	return &UpdateWorker{
+		controller:   controller,
+		remoteUser:   remoteUser,
+		extraSSHOpts: extraSSHOpts,
+		nodes:        nodes,
+		interval:     interval,
+	}
 }
 
 func (w *UpdateWorker) Run(ctx context.Context, ch chan<- common.Result) {
@@ -138,8 +164,15 @@ func (w *UpdateWorker) Run(ctx context.Context, ch chan<- common.Result) {
 			return
 		default:
 			var fetchers []common.Fetcher
-			for _, host := range w.hosts {
-				fetcher := NewLocalTiKVCtl(w.controller, host)
+			for _, node := range w.nodes {
+				fetcher := &LocalTiKVCtl{
+					Controller:   w.controller,
+					ExtraSSHOpts: w.extraSSHOpts,
+					User:         w.remoteUser,
+					Host:         node.Host,
+					Port:         node.Port,
+					SSHPort:      node.SSHPort,
+				}
 				fetchers = append(fetchers, fetcher)
 			}
 
@@ -159,18 +192,62 @@ type Generator struct {
 	history *ApplyHistory
 }
 
-func NewGenerator(config *Config) *Generator {
+func prepareTiKVCtl(ctx context.Context, config *Config) error {
+	nodes := append(config.Voters, config.Learners...)
+	ch := make(chan error, len(nodes))
+
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	wg := &sync.WaitGroup{}
+	wg.Add(len(nodes))
+	defer wg.Wait()
+
+	for _, node := range nodes {
+		go func(node *spec.TiKVSpec) {
+			defer wg.Done()
+
+			path := fmt.Sprintf("%s@%s:%s", config.RemoteUser, node.Host, config.TiKVCtlPath.Dest)
+			cmd := common.SCP{
+				Port:         node.SSHPort,
+				User:         config.RemoteUser,
+				ExtraSSHOpts: config.ExtraSSHOpts,
+				Src:          []string{config.TiKVCtlPath.Src},
+				Dest:         path,
+			}
+
+			log.Infof("Sending tikv-ctl to %s", node.Host)
+			err := cmd.Run(ctx)
+			ch <- err
+		}(node)
+	}
+
+	for _, node := range nodes {
+		if err := <-ch; err != nil {
+			log.Errorf("Fail to send tikv-ctl to %s", node.Host)
+			return err
+		}
+	}
+
+	return nil
+}
+
+func NewGenerator(ctx context.Context, config *Config) (*Generator, error) {
 	var (
 		history *ApplyHistory
 		err     error
 	)
 	if history, err = FromFile(config.HistoryPath); err != nil {
+		log.Warn("RPO history not found, refreshing")
+		if err := prepareTiKVCtl(ctx, config); err != nil {
+			return nil, err
+		}
 		history = NewApplyHistory()
 	}
 	return &Generator{
 		config:  config,
 		history: history,
-	}
+	}, nil
 }
 
 type RPO struct {
@@ -192,8 +269,8 @@ func (r *RPO) MarshalJSON() ([]byte, error) {
 
 func (g *Generator) Gen(ctx context.Context) error {
 	config := g.config
-	votersInfoUpdater := NewUpdateWorker(config.TikvCtlPath, config.Voters, time.Millisecond*500)
-	learnerInfosUpdater := NewUpdateWorker(config.TikvCtlPath, config.Learners, time.Second*2)
+	votersInfoUpdater := NewUpdateWorker(config.TiKVCtlPath.Dest, config.RemoteUser, config.ExtraSSHOpts, config.Voters, time.Millisecond*500)
+	learnerInfosUpdater := NewUpdateWorker(config.TiKVCtlPath.Dest, config.RemoteUser, config.ExtraSSHOpts, config.Learners, time.Second*2)
 
 	voterCh := make(chan common.Result)
 	learnerCh := make(chan common.Result)
@@ -211,8 +288,8 @@ func (g *Generator) Gen(ctx context.Context) error {
 			case <-ctx.Done():
 				return
 			default:
+				time.Sleep(time.Second * 10)
 				persistCh <- struct{}{}
-				time.Sleep(time.Second * 1)
 			}
 		}
 	}()
