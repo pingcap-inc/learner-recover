@@ -56,7 +56,7 @@ func (c *SSHCommand) Run(ctx context.Context) ([]byte, error) {
 	}, c.Args...)...)...)
 	cmd := exec.CommandContext(ctx, "ssh", args...)
 
-	log.Infof("execute command: %s", cmd.String())
+	log.Debugf("execute command: %s", cmd.String())
 
 	return cmd.Output()
 }
@@ -72,6 +72,6 @@ type SCP struct {
 func (s *SCP) Run(ctx context.Context) error {
 	args := append([]string{"-P", fmt.Sprintf("%v", s.Port)}, s.ExtraSSHOpts...)
 	cmd := exec.CommandContext(ctx, "scp", append(append(args, s.Src...), s.Dest)...)
-	log.Infof("execute command: %s", cmd.String())
+	log.Debugf("execute command: %s", cmd.String())
 	return cmd.Run()
 }
