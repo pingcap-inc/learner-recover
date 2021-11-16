@@ -58,14 +58,24 @@ func NewConfig(path string) (*Config, error) {
 		return nil, err
 	}
 
-	voterBackoffDuration, err := time.ParseDuration(c.VoterBackoffDuration)
-	if err != nil {
-		return nil, err
+	var voterBackoffDuration time.Duration
+	if c.VoterBackoffDuration == "" {
+		voterBackoffDuration = time.Second * 1
+	} else {
+		voterBackoffDuration, err = time.ParseDuration(c.VoterBackoffDuration)
+		if err != nil {
+			return nil, err
+		}
 	}
 
-	learnerBackoffDuration, err := time.ParseDuration(c.LearnerBackoffDuration)
-	if err != nil {
-		return nil, err
+	var learnerBackoffDuration time.Duration
+	if c.LearnerBackoffDuration == "" {
+		learnerBackoffDuration = time.Second * 1
+	} else {
+		learnerBackoffDuration, err = time.ParseDuration(c.LearnerBackoffDuration)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	topo, err := common.ParseTiUPTopology(c.Topology)
