@@ -233,6 +233,7 @@ func (r *ClusterRescuer) applyNewPlacementRule(ctx context.Context) error {
 		"enable",
 	}...)...)
 
+	log.Debugf("executing %s", cmd.String())
 	err := cmd.Run()
 	if err != nil {
 		return err
@@ -241,10 +242,13 @@ func (r *ClusterRescuer) applyNewPlacementRule(ctx context.Context) error {
 	cmd = exec.CommandContext(ctx, name, append(args, []string{
 		"config",
 		"placement-rules",
+		"rule-bundle",
 		"set",
 		"pd",
 		fmt.Sprintf("--in=%s", c.NewPlacementRules),
 	}...)...)
+
+	log.Debugf("executing %s", cmd.String())
 
 	return cmd.Run()
 }
