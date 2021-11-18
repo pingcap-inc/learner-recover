@@ -19,5 +19,5 @@ var (
 
 func init() {
 	rootCmd.AddCommand(failbackCmd)
-	fetchCmd.Flags().StringVarP(&failbackConfig, "config", "c", "", "path of example file")
+	failbackCmd.Flags().StringVarP(&failbackConfig, "config", "c", "", "path of example file")
 }
