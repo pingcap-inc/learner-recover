@@ -36,5 +36,5 @@ var (
 
 func init() {
 	rootCmd.AddCommand(fetchCmd)
-	fetchCmd.Flags().StringVarP(&fetchConfig, "example", "c", "", "path of example file")
+	fetchCmd.Flags().StringVarP(&fetchConfig, "config", "c", "", "path of example file")
 }
