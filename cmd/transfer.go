@@ -11,9 +11,9 @@ import (
 )
 
 var (
-	topo        string
-	version     string
-	transferCmd = &cobra.Command{
+	topo           string
+	clusterVersion string
+	transferCmd    = &cobra.Command{
 		Use:   "transfer",
 		Short: "transfer master cluster",
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -40,7 +40,7 @@ var (
 			monitor := topo.Monitors[0]
 			pd := topo.PDServers[0]
 			action := transfer.AddLeaders{
-				Version:  version,
+				Version:  clusterVersion,
 				PromAddr: fmt.Sprintf("%s:%v", monitor.Host, monitor.Port),
 				PDAddr:   fmt.Sprintf("%s:%v", pd.Host, pd.ClientPort),
 				Rule:     addLearnersRule,
@@ -54,7 +54,7 @@ var (
 func init() {
 	rootCmd.AddCommand(transferCmd)
 	transferCmd.PersistentFlags().StringVarP(&topo, "topo", "", "", "topology of cluster")
-	transferCmd.PersistentFlags().StringVarP(&version, "version", "", "", "version of cluster")
+	transferCmd.PersistentFlags().StringVarP(&clusterVersion, "version", "", "", "version of cluster")
 
 	addLearners.Flags().StringVarP(&addLearnersRule, "rule", "", "", "learners rules for master cluster")
 	transferCmd.AddCommand(addLearners)
