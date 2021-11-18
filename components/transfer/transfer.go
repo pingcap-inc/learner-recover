@@ -36,7 +36,7 @@ type AddLeaders struct {
 // pd -u http://172.16.105.149:2779 config placement-rules rule-bundle set pd --in=step2.json
 func (a AddLeaders) addLearners(ctx context.Context) error {
 	cmd := exec.Command("tiup", fmt.Sprintf("ctl:%s", a.Version), "pd",
-		"-u", fmt.Sprintf("http://%s", a.PDAddr),
+		"-u", a.PDAddr,
 		"config", "placement-rules", "rule-bundle", "set", "pd", "--in="+a.Rule,
 	)
 	return cmd.Run()

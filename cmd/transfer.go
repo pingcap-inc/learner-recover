@@ -41,8 +41,8 @@ var (
 			pd := topo.PDServers[0]
 			action := transfer.AddLeaders{
 				Version:  clusterVersion,
-				PromAddr: fmt.Sprintf("%s:%v", monitor.Host, monitor.Port),
-				PDAddr:   fmt.Sprintf("%s:%v", pd.Host, pd.ClientPort),
+				PromAddr: fmt.Sprintf("http://%s:%v", monitor.Host, monitor.Port),
+				PDAddr:   fmt.Sprintf("http://%s:%v", pd.Host, pd.ClientPort),
 				Rule:     addLearnersRule,
 			}
 
