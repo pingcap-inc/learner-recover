@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-
 	"github.com/iosmanthus/learner-recover/common"
 	"github.com/iosmanthus/learner-recover/components/transfer"
 	"github.com/spf13/cobra"
@@ -26,30 +25,58 @@ var (
 		Use:   "add-learners",
 		Short: "add learners to master cluster",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			topo, err := common.ParseTiUPTopology(topo)
+			pd, prom, err := extractController(topo)
 			if err != nil {
 				return err
 			}
-
-			if len(topo.Monitors) == 0 {
-				return errors.New("missing monitors")
-			} else if len(topo.PDServers) == 0 {
-				return errors.New("missing PD servers")
-			}
-
-			monitor := topo.Monitors[0]
-			pd := topo.PDServers[0]
-			action := transfer.AddLeaders{
+			action := transfer.Action{
 				Version:  clusterVersion,
-				PromAddr: fmt.Sprintf("http://%s:%v", monitor.Host, monitor.Port),
-				PDAddr:   fmt.Sprintf("http://%s:%v", pd.Host, pd.ClientPort),
+				PDAddr:   pd,
+				PromAddr: prom,
 				Rule:     addLearnersRule,
 			}
 
-			return action.Apply(context.Background())
+			return action.AddLearners(context.Background())
+		},
+	}
+
+	transferLeaderRule string
+	transferLeaderCmd  = &cobra.Command{
+		Use:   "transfer-leader",
+		Short: "transfer leaders to master cluster",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			pd, prom, err := extractController(topo)
+			if err != nil {
+				return err
+			}
+			action := transfer.Action{
+				Version:  clusterVersion,
+				PDAddr:   pd,
+				PromAddr: prom,
+				Rule:     transferLeaderRule,
+			}
+
+			return action.TransferLeader(context.Background())
 		},
 	}
 )
+
+func extractController(topo string) (string, string, error) {
+	t, err := common.ParseTiUPTopology(topo)
+	if err != nil {
+		return "", "", err
+	}
+
+	if len(t.Monitors) == 0 {
+		return "", "", errors.New("missing monitors")
+	} else if len(t.PDServers) == 0 {
+		return "", "", errors.New("missing PD servers")
+	}
+
+	return "http://" + t.PDServers[0].Host + ":" + fmt.Sprintf("%v", t.PDServers[0].ClientPort),
+		"http://" + t.Monitors[0].Host + ":" + fmt.Sprintf("%v", t.Monitors[0].Port),
+		nil
+}
 
 func init() {
 	rootCmd.AddCommand(transferCmd)
@@ -57,5 +84,8 @@ func init() {
 	transferCmd.PersistentFlags().StringVarP(&clusterVersion, "version", "", "", "version of cluster")
 
 	addLearners.Flags().StringVarP(&addLearnersRule, "rule", "", "", "learners rules for master cluster")
+	transferCmd.Flags().StringVarP(&addLearnersRule, "rule", "", "", "transfer-leader rules for master cluster")
+
 	transferCmd.AddCommand(addLearners)
+	transferCmd.AddCommand(transferLeaderCmd)
 }
