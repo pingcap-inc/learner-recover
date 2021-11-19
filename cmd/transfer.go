@@ -59,6 +59,26 @@ var (
 			return action.TransferLeader(context.Background())
 		},
 	}
+
+	restoreRule string
+	restoreCmd  = &cobra.Command{
+		Use:   "restore",
+		Short: "restore master placement rules",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			pd, prom, err := extractController(topo)
+			if err != nil {
+				return err
+			}
+			action := transfer.Action{
+				Version:  clusterVersion,
+				PDAddr:   pd,
+				PromAddr: prom,
+				Rule:     restoreRule,
+			}
+
+			return action.Restore(context.Background())
+		},
+	}
 )
 
 func extractController(topo string) (string, string, error) {
@@ -85,7 +105,9 @@ func init() {
 
 	addLearners.Flags().StringVarP(&addLearnersRule, "rule", "", "", "learners rules for master cluster")
 	transferLeaderCmd.Flags().StringVarP(&transferLeaderRule, "rule", "", "", "transfer-leader rules for master cluster")
+	restoreCmd.Flags().StringVarP(&transferLeaderRule, "rule", "", "", "restore rules for master cluster")
 
 	transferCmd.AddCommand(addLearners)
 	transferCmd.AddCommand(transferLeaderCmd)
+	transferCmd.AddCommand(restoreCmd)
 }

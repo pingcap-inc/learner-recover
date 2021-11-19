@@ -98,7 +98,10 @@ func NewConfig(path string) (*Config, error) {
 		return nil, err
 	}
 
-	sshArgs := strings.Split(c.ExtraSSHOpts, " ")
+	var sshArgs []string
+	if c.ExtraSSHOpts != "" {
+		sshArgs = strings.Split(c.ExtraSSHOpts, " ")
+	}
 
 	return &Config{
 		ClusterVersion:    c.ClusterVersion,

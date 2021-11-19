@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os/exec"
+	"strings"
 	"time"
 
 	prom "github.com/prometheus/client_golang/api"
@@ -24,7 +25,17 @@ func (a Action) apply(ctx context.Context) error {
 		"-u", a.PDAddr,
 		"config", "placement-rules", "rule-bundle", "set", "pd", "--in="+a.Rule,
 	)
-	return cmd.Run()
+
+	output, err := cmd.Output()
+	if err != nil {
+		return err
+	}
+
+	if !strings.HasPrefix(string(output), "\"Update group and rules successfully.\"") {
+		return fmt.Errorf("fail to apply placement rules: %s", string(output))
+	}
+
+	return nil
 }
 
 func newPromApi(promAddr string) (v1.API, error) {

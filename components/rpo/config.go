@@ -108,7 +108,10 @@ func NewConfig(path string) (*Config, error) {
 		return nil, errors.New("no learners in the cluster, please check the topology file")
 	}
 
-	sshArgs := strings.Split(c.ExtraSSHOpts, " ")
+	var sshArgs []string
+	if c.ExtraSSHOpts != "" {
+		sshArgs = strings.Split(c.ExtraSSHOpts, " ")
+	}
 
 	return &Config{
 		Voters:                 voters,
