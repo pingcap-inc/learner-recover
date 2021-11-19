@@ -105,7 +105,7 @@ func init() {
 
 	addLearners.Flags().StringVarP(&addLearnersRule, "rule", "", "", "learners rules for master cluster")
 	transferLeaderCmd.Flags().StringVarP(&transferLeaderRule, "rule", "", "", "transfer-leader rules for master cluster")
-	restoreCmd.Flags().StringVarP(&transferLeaderRule, "rule", "", "", "restore rules for master cluster")
+	restoreCmd.Flags().StringVarP(&restoreRule, "rule", "", "", "restore rules for master cluster")
 
 	transferCmd.AddCommand(addLearners)
 	transferCmd.AddCommand(transferLeaderCmd)
