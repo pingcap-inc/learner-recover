@@ -84,7 +84,7 @@ func init() {
 	transferCmd.PersistentFlags().StringVarP(&clusterVersion, "version", "", "", "version of cluster")
 
 	addLearners.Flags().StringVarP(&addLearnersRule, "rule", "", "", "learners rules for master cluster")
-	transferCmd.Flags().StringVarP(&addLearnersRule, "rule", "", "", "transfer-leader rules for master cluster")
+	transferLeaderCmd.Flags().StringVarP(&addLearnersRule, "rule", "", "", "transfer-leader rules for master cluster")
 
 	transferCmd.AddCommand(addLearners)
 	transferCmd.AddCommand(transferLeaderCmd)
