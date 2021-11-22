@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"sort"
+	"strconv"
 	"sync"
 
 	"github.com/pingcap/tiup/pkg/cluster/spec"
@@ -195,11 +196,36 @@ func (r *ClusterRescuer) promoteLearner(ctx context.Context) error {
 		go func(node *spec.TiKVSpec) {
 			defer wg.Done()
 
+			path := fmt.Sprintf("%s/db", node.DataDir)
+			cmd := common.SSHCommand{
+				Port:         node.SSHPort,
+				User:         config.User,
+				Host:         node.Host,
+				ExtraSSHOpts: config.ExtraSSHOpts,
+				CommandName:  config.TiKVCtl.Dest,
+				Args: []string{
+					"--db", path, "store",
+				},
+			}
+			storeIDStr, err := cmd.Run(ctx)
+			if err != nil {
+				ch <- fmt.Errorf("fail to read store id of %s:%v", node.Host, node.Port)
+				return
+			}
+
+			self, err := strconv.ParseUint(string(storeIDStr), 10, 64)
+			if err != nil {
+				ch <- fmt.Errorf("invalid store id from %s:%v: %v", node.Host, node.Port, storeIDStr)
+			}
+
 			// remove-fail-stores --promote-learner --all-regions
 			log.Infof("Promoting learners of TiKV server on %s:%v", node.Host, node.Port)
 
 			var stores string
 			for i, store := range config.RecoverInfoFile.StoreIDs {
+				if store == self {
+					continue
+				}
 				if i == 0 {
 					stores += fmt.Sprintf("%v", store)
 				} else {
@@ -207,8 +233,7 @@ func (r *ClusterRescuer) promoteLearner(ctx context.Context) error {
 				}
 			}
 
-			path := fmt.Sprintf("%s/db", node.DataDir)
-			cmd := common.SSHCommand{
+			cmd = common.SSHCommand{
 				Port:         node.SSHPort,
 				User:         config.User,
 				Host:         node.Host,
@@ -220,7 +245,7 @@ func (r *ClusterRescuer) promoteLearner(ctx context.Context) error {
 				},
 			}
 
-			_, err := cmd.Run(ctx)
+			_, err = cmd.Run(ctx)
 			ch <- err
 		}(node)
 	}
