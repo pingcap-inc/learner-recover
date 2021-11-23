@@ -304,7 +304,7 @@ func (c *RemoteTiKVCtl) Fetch(ctx context.Context) (*common.RegionInfos, error) 
 	}
 
 	infos := &common.RegionInfos{}
-	if err = json.Unmarshal(resp, infos); err != nil {
+	if err = json.Unmarshal([]byte(resp), infos); err != nil {
 		return nil, err
 	}
 
