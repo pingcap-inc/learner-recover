@@ -216,6 +216,7 @@ func (r *ClusterRescuer) promoteLearner(ctx context.Context) error {
 			self, err := strconv.ParseUint(string(storeIDStr), 10, 64)
 			if err != nil {
 				ch <- fmt.Errorf("invalid store id from %s:%v: %v", node.Host, node.Port, string(storeIDStr))
+				return
 			}
 
 			// remove-fail-stores --promote-learner --all-regions
