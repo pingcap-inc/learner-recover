@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"sort"
 	"strconv"
+	"strings"
 	"sync"
 
 	"github.com/pingcap/tiup/pkg/cluster/spec"
@@ -207,15 +208,18 @@ func (r *ClusterRescuer) promoteLearner(ctx context.Context) error {
 					"--db", path, "store",
 				},
 			}
-			storeIDStr, err := cmd.Run(ctx)
+			storeIDBytes, err := cmd.Run(ctx)
 			if err != nil {
 				ch <- fmt.Errorf("fail to read store id of %s:%v", node.Host, node.Port)
 				return
 			}
 
-			self, err := strconv.ParseUint(string(storeIDStr), 10, 64)
+			storeIDStr := string(storeIDBytes)
+			storeIDStr = strings.TrimPrefix("store id: ", storeIDStr)
+
+			self, err := strconv.ParseUint(storeIDStr, 10, 64)
 			if err != nil {
-				ch <- fmt.Errorf("invalid store id %v, from %s:%v: %v", string(storeIDStr), node.Host, node.Port, err)
+				ch <- fmt.Errorf("invalid store id: %v, from %s:%v: %v", storeIDStr, node.Host, node.Port, err)
 				return
 			}
 
