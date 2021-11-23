@@ -227,8 +227,11 @@ func (r *ClusterRescuer) promoteLearner(ctx context.Context) error {
 			// remove-fail-stores --promote-learner --all-regions
 			log.Infof("Promoting learners of TiKV server on %s:%v", node.Host, node.Port)
 
-			var stores string
-			for i, store := range config.RecoverInfoFile.StoreIDs {
+			var (
+				i      int
+				stores string
+			)
+			for _, store := range config.RecoverInfoFile.StoreIDs {
 				if store == self {
 					continue
 				}
@@ -237,6 +240,7 @@ func (r *ClusterRescuer) promoteLearner(ctx context.Context) error {
 				} else {
 					stores += fmt.Sprintf(",%v", store)
 				}
+				i++
 			}
 
 			cmd = common.SSHCommand{
