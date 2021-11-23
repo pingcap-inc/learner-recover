@@ -41,6 +41,11 @@ func Run(cmd *exec.Cmd) (string, error) {
 	return out, err
 }
 
+func TiUP(ctx context.Context, args ...string) (string, error) {
+	cmd := exec.CommandContext(ctx, "tiup", args...)
+	return Run(cmd)
+}
+
 type SSHCommand struct {
 	Port         int
 	User         string
@@ -74,17 +79,4 @@ func (s *SCP) Run(ctx context.Context) error {
 	cmd := exec.CommandContext(ctx, "scp", append(append(args, s.Src...), s.Dest)...)
 	log.Infof("execute command: %s", cmd.String())
 	return cmd.Run()
-}
-
-func TiUP(ctx context.Context, args ...string) (string, error) {
-	cmd := exec.CommandContext(ctx, "tiup", args...)
-	output, err := cmd.CombinedOutput()
-
-	out := string(output)
-	if err != nil {
-		log.Warnf("%s: %v", out, err)
-	} else {
-		log.Info(out)
-	}
-	return out, err
 }
