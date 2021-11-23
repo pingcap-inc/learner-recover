@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/davecgh/go-spew/spew"
 	"sort"
 	"strconv"
 	"strings"
@@ -74,6 +75,7 @@ func (r *ResolveConflicts) ResolveConflicts(ctx context.Context, c *Config) erro
 }
 
 func (r *ResolveConflicts) Merge(_ *common.RegionInfos, b *common.RegionInfos) *common.RegionInfos {
+	log.Infof("b is %s", spew.Sdump(b))
 	toBeResolved := make([]*common.RegionState, 0)
 	newResolved := make([]*common.RegionState, 0)
 
@@ -135,6 +137,8 @@ func (r *ResolveConflicts) Merge(_ *common.RegionInfos, b *common.RegionInfos) *
 		}
 	}
 
+	log.Infof("resolved are %s", spew.Sdump(r.resolved))
+	log.Infof("conflicts are %s", spew.Sdump(r.conflicts))
 	return nil
 }
 
