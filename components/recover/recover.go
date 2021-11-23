@@ -126,18 +126,16 @@ func (r *ClusterRescuer) RebuildPD(ctx context.Context) error {
 
 	log.Info("Rebuilding PD server")
 
-	cmd := exec.CommandContext(ctx, "tiup", "cluster", "deploy", "-y", c.ClusterName, c.ClusterVersion, c.NewTopology.Path)
-	common.Run(cmd)
+	_, _ = common.TiUP(ctx, "cluster", "deploy", "-y", c.ClusterName, c.ClusterVersion, c.NewTopology.Path)
 
-	cmd = exec.CommandContext(ctx, "tiup", "cluster", "start", "-y", c.ClusterName)
-	_, err := common.Run(cmd)
+	_, err := common.TiUP(ctx, "cluster", "start", "-y", c.ClusterName)
 	if err != nil {
 		return err
 	}
 
 	// PDRecover
 	pdServer := c.NewTopology.PDServers[0]
-	cmd = exec.CommandContext(ctx, c.PDRecoverPath,
+	cmd := exec.CommandContext(ctx, c.PDRecoverPath,
 		"-endpoints", fmt.Sprintf("http://%s:%v", pdServer.Host, pdServer.ClientPort),
 		"-cluster-id", c.RecoverInfoFile.ClusterID, "-alloc-id", fmt.Sprintf("%v", c.RecoverInfoFile.AllocID))
 	_, err = common.Run(cmd)
@@ -146,8 +144,7 @@ func (r *ClusterRescuer) RebuildPD(ctx context.Context) error {
 		return err
 	}
 
-	cmd = exec.CommandContext(ctx, "tiup", "cluster", "restart", "-y", c.ClusterName)
-	_, err = common.Run(cmd)
+	_, err = common.TiUP(ctx, "cluster", "restart", "-y", c.ClusterName)
 
 	if err != nil {
 		return err
@@ -195,24 +192,21 @@ func (r *ClusterRescuer) pdBootstrap(ctx context.Context) error {
 
 func (r *ClusterRescuer) patchCluster(ctx context.Context) error {
 	c := r.config
-	cmd := exec.CommandContext(ctx, "tiup", "cluster", "stop", "-y", c.ClusterName)
-	err := cmd.Run()
+	_, err := common.TiUP(ctx, "cluster", "stop", "-y", c.ClusterName)
 	if err != nil {
 		return err
 	}
 
-	cmd = exec.CommandContext(ctx, "tiup", "cluster", "patch", "-y",
+	_, err = common.TiUP(ctx, "cluster", "patch", "-y",
 		c.ClusterName,
 		c.Patch,
 		"--offline", "--overwrite", "-R", "tikv")
 
-	_, err = common.Run(cmd)
 	if err != nil {
 		log.Errorf("fail to patch TiKV cluster: %v", err)
 	}
 
-	cmd = exec.CommandContext(ctx, "tiup", "cluster", "start", "-y", c.ClusterName)
-	_, err = common.Run(cmd)
+	_, err = common.TiUP(ctx, "cluster", "start", "-y", c.ClusterName)
 	return err
 }
 
@@ -255,8 +249,8 @@ func (r *ClusterRescuer) applyNewPlacementRule(ctx context.Context) error {
 
 func (r *ClusterRescuer) joinTiKV(ctx context.Context) error {
 	c := r.config
-	cmd := exec.CommandContext(ctx, "tiup", "cluster", "scale-out", "-y", c.ClusterName, c.JoinTopology)
-	return cmd.Run()
+	_, err := common.TiUP(ctx, "cluster", "scale-out", "-y", c.ClusterName, c.JoinTopology)
+	return err
 }
 
 func (r *ClusterRescuer) Finish(ctx context.Context) error {

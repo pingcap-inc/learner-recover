@@ -75,3 +75,16 @@ func (s *SCP) Run(ctx context.Context) error {
 	log.Infof("execute command: %s", cmd.String())
 	return cmd.Run()
 }
+
+func TiUP(ctx context.Context, args ...string) (string, error) {
+	cmd := exec.CommandContext(ctx, "tiup", args...)
+	output, err := cmd.CombinedOutput()
+
+	out := string(output)
+	if err != nil {
+		log.Warnf("%s: %v", out, err)
+	} else {
+		log.Info(out)
+	}
+	return out, err
+}

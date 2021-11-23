@@ -3,7 +3,7 @@ package transfer
 import (
 	"context"
 	"fmt"
-	"os/exec"
+	"github.com/iosmanthus/learner-recover/common"
 	"strings"
 	"time"
 
@@ -21,18 +21,17 @@ type Action struct {
 }
 
 func (a Action) apply(ctx context.Context) error {
-	cmd := exec.Command("tiup", fmt.Sprintf("ctl:%s", a.Version), "pd",
+	output, err := common.TiUP(ctx,
+		fmt.Sprintf("ctl:%s", a.Version), "pd",
 		"-u", a.PDAddr,
-		"config", "placement-rules", "rule-bundle", "set", "pd", "--in="+a.Rule,
-	)
+		"config", "placement-rules", "rule-bundle", "set", "pd", "--in="+a.Rule)
 
-	output, err := cmd.Output()
 	if err != nil {
 		return err
 	}
 
-	if !strings.HasPrefix(string(output), "\"Update group and rules successfully.\"") {
-		return fmt.Errorf("fail to apply placement rules: %s", string(output))
+	if !strings.HasPrefix(output, "\"Update group and rules successfully.\"") {
+		return fmt.Errorf("fail to apply placement rules: %s", output)
 	}
 
 	return nil
