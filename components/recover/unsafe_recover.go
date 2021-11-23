@@ -215,7 +215,7 @@ func (r *ClusterRescuer) promoteLearner(ctx context.Context) error {
 
 			self, err := strconv.ParseUint(string(storeIDStr), 10, 64)
 			if err != nil {
-				ch <- fmt.Errorf("invalid store id from %s:%v: %v", node.Host, node.Port, string(storeIDStr))
+				ch <- fmt.Errorf("invalid store id %v, from %s:%v: %v", string(storeIDStr), node.Host, node.Port, err)
 				return
 			}
 
