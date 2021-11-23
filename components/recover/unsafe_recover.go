@@ -216,6 +216,7 @@ func (r *ClusterRescuer) promoteLearner(ctx context.Context) error {
 
 			storeIDStr := string(storeIDBytes)
 			storeIDStr = strings.TrimPrefix(storeIDStr, "store id: ")
+			storeIDStr = strings.TrimSuffix(storeIDStr, "\n")
 
 			self, err := strconv.ParseUint(storeIDStr, 10, 64)
 			if err != nil {
