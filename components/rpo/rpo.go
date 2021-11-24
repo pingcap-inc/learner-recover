@@ -76,19 +76,21 @@ func (h *ApplyHistory) Save(path string) error {
 	return ioutil.WriteFile(path, data, 0644)
 }
 
-type MaxApplyIndex struct{}
+type MaxApplyIndex struct {
+	inner *common.RegionInfos
+}
 
-func (m MaxApplyIndex) Merge(a *common.RegionInfos, b *common.RegionInfos) *common.RegionInfos {
+func (m *MaxApplyIndex) Merge(b *common.RegionInfos) {
+	inner := m.inner
 	for id, info := range b.StateMap {
-		if v, has := a.StateMap[id]; has {
+		if v, has := inner.StateMap[id]; has {
 			if info.ApplyState.AppliedIndex > v.ApplyState.AppliedIndex {
-				a.StateMap[id] = info
+				inner.StateMap[id] = info
 			}
 		} else {
-			a.StateMap[id] = info
+			inner.StateMap[id] = info
 		}
 	}
-	return a
 }
 
 type LocalTiKVCtl struct {
@@ -176,7 +178,7 @@ func (w *UpdateWorker) Run(ctx context.Context, ch chan<- common.Result) {
 				fetchers = append(fetchers, fetcher)
 			}
 
-			infos, err := collector.Collect(ctx, fetchers, MaxApplyIndex{})
+			infos, err := collector.Collect(ctx, fetchers, new(MaxApplyIndex))
 			if err != nil {
 				ch <- common.Result{Error: err}
 				break

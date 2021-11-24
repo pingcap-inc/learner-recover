@@ -4,8 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/davecgh/go-spew/spew"
-	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -16,131 +14,6 @@ import (
 
 	log "github.com/sirupsen/logrus"
 )
-
-type ResolveConflicts struct {
-	conflicts []*common.RegionState
-	resolved  []*common.RegionState
-}
-
-func NewResolveConflicts() *ResolveConflicts {
-	return &ResolveConflicts{}
-}
-
-func (r *ResolveConflicts) ResolveConflicts(ctx context.Context, c *Config) error {
-	type Target struct {
-		DataDir string
-		SSHPort int
-		IDs     []common.RegionId
-	}
-
-	conflicts := make(map[string]*Target)
-	for _, conflict := range r.conflicts {
-		target := conflict.Host
-		if _, ok := conflicts[target]; !ok {
-			conflicts[target] = &Target{
-				DataDir: conflict.DataDir,
-				SSHPort: conflict.SSHPort,
-			}
-		}
-		conflicts[target].IDs = append(conflicts[target].IDs, conflict.RegionId)
-	}
-
-	for target, conflict := range conflicts {
-		s := ""
-		for i, id := range conflict.IDs {
-			if i == 0 {
-				s = fmt.Sprintf("%v", id)
-			} else {
-				s += fmt.Sprintf(",%v", id)
-			}
-		}
-
-		cmd := common.SSHCommand{
-			Port:         conflict.SSHPort,
-			User:         c.User,
-			Host:         target,
-			ExtraSSHOpts: c.ExtraSSHOpts,
-			CommandName:  c.TiKVCtl.Dest,
-			Args: []string{
-				"--db", fmt.Sprintf("%s/db", conflict.DataDir), "tombstone", "--force", "-r", s,
-			},
-		}
-
-		_, err := cmd.Run(ctx)
-		if err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func (r *ResolveConflicts) Merge(_ *common.RegionInfos, b *common.RegionInfos) *common.RegionInfos {
-	log.Infof("b is %s", spew.Sdump(b))
-	toBeResolved := make([]*common.RegionState, 0)
-	newResolved := make([]*common.RegionState, 0)
-
-	for _, state := range b.StateMap {
-		toBeResolved = append(toBeResolved, state)
-	}
-
-	for {
-		hasConflict := false
-
-		for _, state := range toBeResolved {
-			var other *common.RegionState
-			otherIdx := -1
-			if len(r.resolved) != 0 {
-				if state.LocalState.Region.EndKey == "" {
-					other = r.resolved[len(r.resolved)-1]
-					otherIdx = len(r.resolved) - 1
-				} else {
-					i := sort.Search(len(r.resolved), func(i int) bool { return r.resolved[i].LocalState.Region.StartKey < state.LocalState.Region.EndKey })
-					if i < len(r.resolved) {
-						other = r.resolved[i]
-						otherIdx = i
-					}
-				}
-			}
-
-			if other != nil &&
-				(other.LocalState.Region.EndKey == "" ||
-					other.LocalState.Region.EndKey > state.LocalState.Region.StartKey) {
-				hasConflict = true
-				// resolve conflicts
-				version1 := state.LocalState.Region.RegionEpoch.Version
-				version2 := other.LocalState.Region.RegionEpoch.Version
-				if version1 > version2 ||
-					(version1 == version2 && state.ApplyState.AppliedIndex >= other.ApplyState.AppliedIndex) {
-
-					// remove from resolved
-					r.resolved = append(r.resolved[:otherIdx], r.resolved[otherIdx+1:]...)
-					newResolved = append(newResolved, state)
-					r.conflicts = append(r.conflicts, other)
-
-				} else {
-					r.conflicts = append(r.conflicts, state)
-				}
-			} else {
-				newResolved = append(newResolved, state)
-			}
-		}
-
-		if hasConflict {
-			toBeResolved = newResolved
-			newResolved = make([]*common.RegionState, 0)
-		} else {
-			r.resolved = append(r.resolved, newResolved...)
-			sort.SliceStable(r.resolved, func(i, j int) bool {
-				return r.resolved[i].LocalState.Region.StartKey > r.resolved[j].LocalState.Region.StartKey
-			})
-			break
-		}
-	}
-
-	log.Infof("resolved are %s", spew.Sdump(r.resolved))
-	log.Infof("conflicts are %s", spew.Sdump(r.conflicts))
-	return nil
-}
 
 func (r *ClusterRescuer) dropLogs(ctx context.Context) error {
 	config := r.config
@@ -343,7 +216,7 @@ func (r *ClusterRescuer) UnsafeRecover(ctx context.Context) error {
 	}
 
 	log.Info("fetching region infos")
-	resolver := NewResolveConflicts()
+	resolver := NewResolver()
 
 	_, err = collector.Collect(ctx, fetchers, resolver)
 	if err != nil {
@@ -351,6 +224,10 @@ func (r *ClusterRescuer) UnsafeRecover(ctx context.Context) error {
 	}
 
 	log.Warn("resolving region conflicts")
+	err = resolver.TryResolve()
+	if err != nil {
+		return err
+	}
 	err = resolver.ResolveConflicts(ctx, c)
 	if err != nil {
 		return err
