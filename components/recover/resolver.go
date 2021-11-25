@@ -42,13 +42,13 @@ func (r *Resolver) prepareResolve() {
 
 	for i := range r.buffer {
 		pending := r.buffer[i].LocalState.Region.StartKey
-		//if _, ok := r.resolveMap[pending]; ok {
-		//	queue := r.resolveMap[pending]
-		//	last := queue[len(queue)-1]
-		//	if last.LocalState.Region.RegionEpoch == r.buffer[i].LocalState.Region.RegionEpoch {
-		//		continue
-		//	}
-		//}
+		if _, ok := r.resolveMap[pending]; ok {
+			queue := r.resolveMap[pending]
+			last := queue[len(queue)-1]
+			if last.LocalState.Region.RegionEpoch == r.buffer[i].LocalState.Region.RegionEpoch {
+				continue
+			}
+		}
 		r.resolveMap[pending] = append(r.resolveMap[pending], r.buffer[i])
 	}
 }
