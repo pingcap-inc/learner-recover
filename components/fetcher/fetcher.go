@@ -24,14 +24,13 @@ type Fetcher interface {
 }
 
 type RecoverInfoFetcher struct {
-	pdServers     []*spec.PDSpec
-	promDriver    promapi.API
-	learnerLabels map[string]string
-	timeout       time.Duration
+	pdServers  []*spec.PDSpec
+	promDriver promapi.API
+	timeout    time.Duration
 }
 
 func NewRecoverInfoFetcher(
-	topology *spec.Specification, learnerLabels map[string]string, timeout time.Duration,
+	topology *spec.Specification, timeout time.Duration,
 ) (*RecoverInfoFetcher, error) {
 	if len(topology.PDServers) == 0 || len(topology.TiKVServers) == 0 || len(topology.Monitors) == 0 {
 		return nil, errors.New("invalid topology")
@@ -46,51 +45,18 @@ func NewRecoverInfoFetcher(
 	}
 
 	return &RecoverInfoFetcher{
-		pdServers:     topology.PDServers,
-		promDriver:    promapi.NewAPI(client),
-		learnerLabels: learnerLabels,
-		timeout:       timeout,
+		pdServers:  topology.PDServers,
+		promDriver: promapi.NewAPI(client),
+		timeout:    timeout,
 	}, nil
 }
 
 type getStores struct {
 	Stores []struct {
-		ID     uint64
-		Labels map[string]string
-	}
-}
-
-func (g *getStores) UnmarshalJSON(data []byte) error {
-	type _getStores struct {
-		Stores []struct {
-			Store struct {
-				ID     uint64 `json:"id"`
-				Labels []struct {
-					Key   string `json:"key"`
-					Value string `json:"value"`
-				} `json:"labels"`
-			} `json:"store"`
-		} `json:"stores"`
-	}
-
-	t := &_getStores{}
-	if err := json.Unmarshal(data, t); err != nil {
-		return err
-	}
-
-	stores := t.Stores
-	for i := range stores {
-		labelsMap := make(map[string]string)
-		for _, label := range stores[i].Store.Labels {
-			labelsMap[label.Key] = label.Value
-		}
-		g.Stores = append(g.Stores, struct {
-			ID     uint64
-			Labels map[string]string
-		}{ID: stores[i].Store.ID, Labels: labelsMap})
-	}
-
-	return nil
+		Store struct {
+			ID uint64 `json:"id"`
+		} `json:"store"`
+	} `json:"stores"`
 }
 
 func (f *RecoverInfoFetcher) fetchStoreIDs(ctx context.Context) ([]uint64, error) {
@@ -111,9 +77,7 @@ func (f *RecoverInfoFetcher) fetchStoreIDs(ctx context.Context) ([]uint64, error
 
 	storeIDs := make([]uint64, 0, len(stores.Stores))
 	for _, store := range stores.Stores {
-		if !common.IsLabelsMatch(f.learnerLabels, store.Labels) {
-			storeIDs = append(storeIDs, store.ID)
-		}
+		storeIDs = append(storeIDs, store.Store.ID)
 	}
 
 	return storeIDs, nil
@@ -208,7 +172,7 @@ type RecoverInfoUpdater struct {
 }
 
 func NewRecoverInfoUpdater(config *Config) (*RecoverInfoUpdater, error) {
-	fetcher, err := NewRecoverInfoFetcher(config.Topology, config.LearnerLabels, config.Timeout)
+	fetcher, err := NewRecoverInfoFetcher(config.Topology, config.Timeout)
 	if err != nil {
 		return nil, err
 	}

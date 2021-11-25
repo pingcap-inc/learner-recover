@@ -66,7 +66,7 @@ type RegionState struct {
 }
 
 type Aggregator interface {
-	Merge(a *RegionInfos, b *RegionInfos) *RegionInfos
+	Merge(b *RegionInfos)
 }
 
 type Fetcher interface {
@@ -106,7 +106,7 @@ func (f *RegionCollector) Collect(ctx context.Context, fetchers []Fetcher, m Agg
 		if err := result.Error; err != nil {
 			continue
 		}
-		infos = m.Merge(infos, result.RegionInfos)
+		m.Merge(result.RegionInfos)
 	}
 
 	return infos, nil
