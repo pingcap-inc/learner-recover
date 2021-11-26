@@ -15,3 +15,4 @@ pd-ctl-commands:
   - store limit all 500 add-peer
 new-placement-rules: config/step0.json # placement rules for new cluster
 extra-ssh-opts: -i config/id_rsa
+
