@@ -1,7 +1,5 @@
 save: bin/recover-info.json
 topology: config/old.yaml
-learner-labels:
-  zone: backup
 interval: 1s # go Duration syntax
 last-for: 1m # Ditto
 timeout: 2s
