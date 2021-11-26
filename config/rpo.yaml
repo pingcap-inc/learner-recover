@@ -2,10 +2,16 @@ topology: config/old.yaml
 learner-labels:
   zone: backup
 
-tikv-ctl: bin/tikv-ctl
+voter-backoff-duration: 1s # wait duration to backoff while fetch from voters
+learner-backoff-duration: 1s # wait duration to backoff while fetch from learners
+tikv-ctl:
+  src: bin/tikv-ctl
+  dest: /tmp/tikv-ctl
 
 last-for: 1m
 
 history-path: bin/history.json
 
 save: bin/rpo.json
+extra-ssh-opts: -i config/id_rsa
+
