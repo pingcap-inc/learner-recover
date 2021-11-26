@@ -80,6 +80,12 @@ type MaxApplyIndex struct {
 	inner *common.RegionInfos
 }
 
+func NewMaxApplyIndex() *MaxApplyIndex {
+	return &MaxApplyIndex{
+		inner: common.NewRegionInfos(),
+	}
+}
+
 func (m *MaxApplyIndex) Merge(b *common.RegionInfos) {
 	inner := m.inner
 	for id, info := range b.StateMap {
@@ -114,6 +120,7 @@ func (f *LocalTiKVCtl) Fetch(ctx context.Context) (*common.RegionInfos, error) {
 		User:         f.User,
 		Host:         f.Host,
 		ExtraSSHOpts: f.ExtraSSHOpts,
+		Silent:       true,
 		CommandName:  f.Controller,
 		Args: []string{
 			"--host", fmt.Sprintf("%s:%v", f.Host, f.Port),
@@ -178,7 +185,7 @@ func (w *UpdateWorker) Run(ctx context.Context, ch chan<- common.Result) {
 				fetchers = append(fetchers, fetcher)
 			}
 
-			infos, err := collector.Collect(ctx, fetchers, new(MaxApplyIndex))
+			infos, err := collector.Collect(ctx, fetchers, NewMaxApplyIndex())
 			if err != nil {
 				ch <- common.Result{Error: err}
 				break
@@ -220,13 +227,15 @@ func prepareTiKVCtl(ctx context.Context, config *Config) error {
 
 			log.Infof("Sending tikv-ctl to %s", node.Host)
 			err := cmd.Run(ctx)
+			if err != nil {
+				log.Errorf("Fail to send tikv-ctl to %s", node.Host)
+			}
 			ch <- err
 		}(node)
 	}
 
-	for _, node := range nodes {
+	for i := 0; i < len(nodes); i++ {
 		if err := <-ch; err != nil {
-			log.Errorf("Fail to send tikv-ctl to %s", node.Host)
 			return err
 		}
 	}

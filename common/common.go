@@ -28,13 +28,13 @@ func ParseTiUPTopology(path string) (*spec.Specification, error) {
 	return topo, nil
 }
 
-func Run(cmd *exec.Cmd) (string, error) {
+func Run(cmd *exec.Cmd, verbose bool) (string, error) {
 	output, err := cmd.CombinedOutput()
 	out := string(output)
 
 	if err != nil {
 		log.Warnf("%s: %v", out, err)
-	} else {
+	} else if verbose {
 		log.Info(out)
 	}
 
@@ -43,7 +43,7 @@ func Run(cmd *exec.Cmd) (string, error) {
 
 func TiUP(ctx context.Context, args ...string) (string, error) {
 	cmd := exec.CommandContext(ctx, "tiup", args...)
-	return Run(cmd)
+	return Run(cmd, true)
 }
 
 type SSHCommand struct {
@@ -52,6 +52,7 @@ type SSHCommand struct {
 	Host         string
 	ExtraSSHOpts []string
 	CommandName  string
+	Silent       bool
 	Args         []string
 }
 
@@ -63,7 +64,7 @@ func (c *SSHCommand) Run(ctx context.Context) (string, error) {
 
 	log.Infof("execute command: %s", cmd.String())
 
-	return Run(cmd)
+	return Run(cmd, !c.Silent)
 }
 
 type SCP struct {

@@ -138,7 +138,7 @@ func (r *ClusterRescuer) RebuildPD(ctx context.Context) error {
 	cmd := exec.CommandContext(ctx, c.PDRecoverPath,
 		"-endpoints", fmt.Sprintf("http://%s:%v", pdServer.Host, pdServer.ClientPort),
 		"-cluster-id", c.RecoverInfoFile.ClusterID, "-alloc-id", fmt.Sprintf("%v", c.RecoverInfoFile.AllocID))
-	_, err = common.Run(cmd)
+	_, err = common.Run(cmd, true)
 
 	if err != nil {
 		return err
@@ -182,7 +182,7 @@ func (r *ClusterRescuer) pdBootstrap(ctx context.Context) error {
 	for _, config := range c.PDBootstrap {
 		extra := strings.Split(config, " ")
 		cmd := exec.CommandContext(ctx, name, append(args, extra...)...)
-		_, err := common.Run(cmd)
+		_, err := common.Run(cmd, true)
 		if err != nil {
 			return err
 		}
