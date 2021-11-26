@@ -19,6 +19,10 @@ func NewResolver() *Resolver {
 	}
 }
 
+func (r *Resolver) Get() *common.RegionInfos {
+	return nil
+}
+
 func (r *Resolver) Merge(b *common.RegionInfos) {
 	for _, state := range b.StateMap {
 		r.buffer = append(r.buffer, state)

@@ -66,6 +66,7 @@ type RegionState struct {
 }
 
 type Aggregator interface {
+	Get() *RegionInfos
 	Merge(b *RegionInfos)
 }
 
@@ -86,7 +87,6 @@ func NewRegionCollector() Collector {
 func (f *RegionCollector) Collect(ctx context.Context, fetchers []Fetcher, m Aggregator) (*RegionInfos, error) {
 	ch := make(chan Result, len(fetchers))
 
-	infos := NewRegionInfos()
 	for _, fetcher := range fetchers {
 		go func(fetcher Fetcher) {
 			ctx, cancel := context.WithTimeout(ctx, time.Minute*1)
@@ -109,5 +109,5 @@ func (f *RegionCollector) Collect(ctx context.Context, fetchers []Fetcher, m Agg
 		m.Merge(result.RegionInfos)
 	}
 
-	return infos, nil
+	return m.Get(), nil
 }

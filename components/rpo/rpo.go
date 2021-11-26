@@ -86,6 +86,10 @@ func NewMaxApplyIndex() *MaxApplyIndex {
 	}
 }
 
+func (m *MaxApplyIndex) Get() *common.RegionInfos {
+	return m.inner
+}
+
 func (m *MaxApplyIndex) Merge(b *common.RegionInfos) {
 	inner := m.inner
 	for id, info := range b.StateMap {
