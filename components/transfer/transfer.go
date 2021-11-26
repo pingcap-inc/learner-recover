@@ -30,7 +30,7 @@ func (a Action) apply(ctx context.Context) error {
 		return err
 	}
 
-	if !strings.HasPrefix(output, "\"Update group and rules successfully.\"") {
+	if !strings.Contains(output, "\"Update group and rules successfully.\"") {
 		return fmt.Errorf("fail to apply placement rules: %s", output)
 	}
 
