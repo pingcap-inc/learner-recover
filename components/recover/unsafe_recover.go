@@ -224,7 +224,7 @@ func (r *ClusterRescuer) UnsafeRecover(ctx context.Context) error {
 	}
 
 	log.Warn("resolving region conflicts")
-	err = resolver.TryResolve()
+	_, err = resolver.TryResolve()
 	if err != nil {
 		return err
 	}

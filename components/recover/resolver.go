@@ -10,6 +10,7 @@ import (
 type Resolver struct {
 	resolveMap map[string][]*common.RegionState
 	buffer     []*common.RegionState
+	resolved   []*common.RegionState
 	conflicts  []*common.RegionState
 }
 
@@ -57,11 +58,11 @@ func (r *Resolver) prepareResolve() {
 	}
 }
 
-func (r *Resolver) TryResolve() error {
+func (r *Resolver) TryResolve() ([]*common.RegionState, error) {
 	r.prepareResolve()
 	resolved := r.resolve("")
 	if len(resolved) == 0 {
-		return fmt.Errorf("fail to resolve")
+		return nil, fmt.Errorf("fail to resolve")
 	}
 
 	resolvedMap := make(map[string]bool)
@@ -77,7 +78,7 @@ func (r *Resolver) TryResolve() error {
 		}
 	}
 
-	return nil
+	return resolved, nil
 }
 
 func (r *Resolver) resolve(startKey string) []*common.RegionState {

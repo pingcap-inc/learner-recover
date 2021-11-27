@@ -1,11 +1,31 @@
 package recover
 
 import (
+	"encoding/json"
+	"fmt"
 	"github.com/alecthomas/assert"
+	"github.com/davecgh/go-spew/spew"
 	"github.com/iosmanthus/learner-recover/common"
+	"io/ioutil"
 	"sort"
 	"testing"
 )
+
+func assertFullRange(t *testing.T, ranges []*common.RegionState) {
+	assert.True(t, len(ranges) > 0)
+	assert.Equal(t, ranges[0].LocalState.Region.StartKey, "")
+
+	var (
+		prevEndKey = ranges[0].LocalState.Region.EndKey
+	)
+
+	for i, r := range ranges[1:] {
+		assert.Equal(t, r.LocalState.Region.StartKey, prevEndKey, "prev: %s, current: %s", spew.Sdump(ranges[i]), spew.Sdump(ranges[i+1]))
+		prevEndKey = r.LocalState.Region.EndKey
+	}
+
+	assert.Equal(t, prevEndKey, "")
+}
 
 func TestBase(t *testing.T) {
 	a := new(common.RegionState)
@@ -51,7 +71,9 @@ func TestBase(t *testing.T) {
 
 	resolver := NewResolver()
 	resolver.Merge(samples)
-	assert.Nil(t, resolver.TryResolve())
+	resolved, err := resolver.TryResolve()
+	assert.Nil(t, err)
+	assertFullRange(t, resolved)
 	assert.Equal(t, resolver.conflicts[0].RegionId, common.RegionId(4))
 	assert.Equal(t, resolver.conflicts[0].Host, "4")
 }
@@ -109,7 +131,9 @@ func Test1123Issue(t *testing.T) {
 
 	resolver := NewResolver()
 	resolver.Merge(samples)
-	assert.Nil(t, resolver.TryResolve())
+	resolved, err := resolver.TryResolve()
+	assert.Nil(t, err)
+	assertFullRange(t, resolved)
 	sort.SliceStable(resolver.conflicts, func(i, j int) bool {
 		return resolver.conflicts[i].RegionId < resolver.conflicts[j].RegionId
 	})
@@ -155,5 +179,29 @@ func TestFail(t *testing.T) {
 	}
 	resolver := NewResolver()
 	resolver.Merge(samples)
-	assert.NotNil(t, resolver.TryResolve())
+	_, err := resolver.TryResolve()
+	assert.NotNil(t, err)
+}
+
+func TestFromFile(t *testing.T) {
+	resolver := NewResolver()
+	for i := 1; i <= 5; i++ {
+		path := fmt.Sprintf("../../tests/%v.json", i)
+		data, err := ioutil.ReadFile(path)
+		assert.Nil(t, err)
+
+		info := common.NewRegionInfos()
+		err = json.Unmarshal(data, info)
+		assert.Nil(t, err)
+
+		for _, s := range info.StateMap {
+			s.Host = fmt.Sprintf("%v", i)
+		}
+
+		resolver.Merge(info)
+	}
+
+	resolved, err := resolver.TryResolve()
+	assert.Nil(t, err)
+	assertFullRange(t, resolved)
 }
