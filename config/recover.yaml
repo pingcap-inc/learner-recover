@@ -6,8 +6,7 @@ new-topology: config/new.yaml
 join-topology: config/join.yaml
 recover-info-file: bin/recover-info.json
 zone-labels:
-  - zone: az4
-  - zone: az5
+  - zone: backup
 tikv-ctl:
   src: bin/tikv-ctl
   dest: /root/tikv-ctl

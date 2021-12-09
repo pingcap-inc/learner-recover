@@ -17,6 +17,8 @@ import (
 	"gopkg.in/resty.v1"
 )
 
+var ErrRetryIsExhausted = errors.New("retry is exhausted")
+
 type status int
 
 const (
@@ -301,7 +303,7 @@ func (r *ClusterRescuer) Retry(ctx context.Context) error {
 	c := r.config
 	r.currentZoneIdx++
 	if r.currentZoneIdx == len(c.Zones) {
-		return errors.New("retry is exhausted")
+		return ErrRetryIsExhausted
 	}
 	log.Warnf("Retrying to recover another zone: %v", c.Labels[r.currentZoneIdx])
 	switch r.status {

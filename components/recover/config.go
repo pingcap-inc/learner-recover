@@ -98,7 +98,7 @@ func NewConfig(path string) (*Config, error) {
 			}
 		}
 		if len(nodes) == 0 {
-			return nil, errors.New("no TiKV nodes in the cluster, please check the topology file")
+			return nil, fmt.Errorf("no TiKV nodes in the cluster, please check the topology file, labels: %v", labels)
 		}
 		zones = append(zones, nodes)
 	}
@@ -149,7 +149,7 @@ func checkDuplicate(zones [][]*spec.TiKVSpec) error {
 	for _, zone := range zones {
 		for _, node := range zone {
 			if _, ok := check[node.Host]; ok {
-				return fmt.Errorf("duplicate host: %s" + node.Host)
+				return fmt.Errorf("duplicate host: %s", node.Host)
 			}
 			check[node.Host] = true
 		}
