@@ -145,7 +145,7 @@ func NewConfig(path string) (*Config, error) {
 		}
 		zoneLabels := "join-"
 		for k, v := range labels {
-			zoneLabels += k + v
+			zoneLabels += k + "-" + v
 		}
 		filename := zoneLabels + ".yaml"
 		err = ioutil.WriteFile(filename, data, 0644)
