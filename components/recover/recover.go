@@ -267,7 +267,7 @@ func (r *ClusterRescuer) applyNewPlacementRule(ctx context.Context) error {
 
 func (r *ClusterRescuer) joinTiKV(ctx context.Context) error {
 	c := r.config
-	_, err := common.TiUP(ctx, "cluster", "scale-out", "-y", c.ClusterName, c.JoinTopology)
+	_, err := common.TiUP(ctx, "cluster", "scale-out", "-y", c.ClusterName, c.JoinTopology[r.currentZoneIdx])
 	return err
 }
 

@@ -27,7 +27,7 @@ type Config struct {
 	}
 	NewPlacementRules string
 	PDBootstrap       []string
-	JoinTopology      string
+	JoinTopology      []string
 	RecoverInfoFile   *common.RecoverInfo
 	TiKVCtl           struct {
 		Src  string
@@ -122,6 +122,7 @@ func NewConfig(path string) (*Config, error) {
 		return nil, err
 	}
 
+	var joinFiles []string
 	for _, labels := range c.ZoneLabels {
 		var nodes []*spec.TiKVSpec
 		for _, tikv := range joinTopo.TiKVServers {
@@ -142,14 +143,16 @@ func NewConfig(path string) (*Config, error) {
 		if err != nil {
 			return nil, err
 		}
-		zoneLabels := ""
+		zoneLabels := "join-"
 		for k, v := range labels {
 			zoneLabels += k + v
 		}
-		err = ioutil.WriteFile(zoneLabels, data, 0644)
+		filename := zoneLabels + ".yaml"
+		err = ioutil.WriteFile(filename, data, 0644)
 		if err != nil {
 			return nil, err
 		}
+		joinFiles = append(joinFiles, filename)
 	}
 
 	return &Config{
@@ -165,7 +168,7 @@ func NewConfig(path string) (*Config, error) {
 			Path      string
 			PDServers []*spec.PDSpec
 		}{c.NewTopology, newTopo.PDServers},
-		JoinTopology:    c.JoinTopology,
+		JoinTopology:    joinFiles,
 		RecoverInfoFile: info,
 		PDBootstrap:     c.PDBootstrap,
 		TiKVCtl: struct {
