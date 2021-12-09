@@ -7,7 +7,7 @@ require (
 	github.com/davecgh/go-spew v1.1.1
 	github.com/go-resty/resty/v2 v2.6.0
 	github.com/gofrs/flock v0.8.0
-	github.com/pingcap/log v0.0.0-20191012051959-b742a5d432e9
+	github.com/manifoldco/promptui v0.9.0
 	github.com/pingcap/tiup v1.5.5
 	github.com/prometheus/client_golang v1.11.0
 	github.com/prometheus/common v0.29.0

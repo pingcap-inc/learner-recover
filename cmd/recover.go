@@ -18,8 +18,11 @@ var (
 			if err != nil {
 				return err
 			}
+			ctx := context.Background()
 			rescuer := recover.NewClusterRescuer(config)
-			err = rescuer.Execute(context.Background())
+
+			for err = rescuer.Execute(ctx); err != nil; err = rescuer.Retry(ctx) {
+			}
 			if err != nil {
 				log.Error(err)
 				return err

@@ -3,6 +3,7 @@ package recover
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io/ioutil"
 	"strings"
 
@@ -18,7 +19,8 @@ type Config struct {
 	ClusterName    string
 	User           string
 	ExtraSSHOpts   []string
-	Nodes          []*spec.TiKVSpec
+	Zones          [][]*spec.TiKVSpec
+	Labels         []map[string]string
 	NewTopology    struct {
 		Path      string
 		PDServers []*spec.PDSpec
@@ -36,17 +38,17 @@ type Config struct {
 
 func NewConfig(path string) (*Config, error) {
 	type _Config struct {
-		ClusterVersion    string            `yaml:"cluster-version"`
-		ExtraSSHOpts      string            `yaml:"extra-ssh-opts"`
-		Patch             string            `yaml:"patch"`
-		ClusterName       string            `yaml:"cluster-name"`
-		OldTopology       string            `yaml:"old-topology"`
-		NewTopology       string            `yaml:"new-topology"`
-		JoinTopology      string            `yaml:"join-topology"`
-		NewPlacementRules string            `yaml:"new-placement-rules"`
-		PDBootstrap       []string          `yaml:"pd-ctl-commands"`
-		RecoverInfoFile   string            `yaml:"recover-info-file"`
-		ZoneLabels        map[string]string `yaml:"zone-labels"`
+		ClusterVersion    string              `yaml:"cluster-version"`
+		ExtraSSHOpts      string              `yaml:"extra-ssh-opts"`
+		Patch             string              `yaml:"patch"`
+		ClusterName       string              `yaml:"cluster-name"`
+		OldTopology       string              `yaml:"old-topology"`
+		NewTopology       string              `yaml:"new-topology"`
+		JoinTopology      string              `yaml:"join-topology"`
+		NewPlacementRules string              `yaml:"new-placement-rules"`
+		PDBootstrap       []string            `yaml:"pd-ctl-commands"`
+		RecoverInfoFile   string              `yaml:"recover-info-file"`
+		ZoneLabels        []map[string]string `yaml:"zone-labels"`
 		TiKVCtl           struct {
 			Src  string `yaml:"src"`
 			Dest string `yaml:"dest"`
@@ -64,6 +66,10 @@ func NewConfig(path string) (*Config, error) {
 		return nil, err
 	}
 
+	if len(c.ZoneLabels) == 0 {
+		return nil, errors.New("empty zone labels")
+	}
+
 	topo, err := common.ParseTiUPTopology(c.OldTopology)
 	if err != nil {
 		return nil, err
@@ -79,18 +85,26 @@ func NewConfig(path string) (*Config, error) {
 		return nil, err
 	}
 
-	var nodes []*spec.TiKVSpec
-	for _, tikv := range topo.TiKVServers {
-		serverLabels, err := tikv.Labels()
-		if err != nil {
-			return nil, err
+	var zones [][]*spec.TiKVSpec
+	for _, labels := range c.ZoneLabels {
+		var nodes []*spec.TiKVSpec
+		for _, tikv := range topo.TiKVServers {
+			serverLabels, err := tikv.Labels()
+			if err != nil {
+				return nil, err
+			}
+			if common.IsLabelsMatch(labels, serverLabels) {
+				nodes = append(nodes, tikv)
+			}
 		}
-		if common.IsLabelsMatch(c.ZoneLabels, serverLabels) {
-			nodes = append(nodes, tikv)
+		if len(nodes) == 0 {
+			return nil, errors.New("no TiKV nodes in the cluster, please check the topology file")
 		}
+		zones = append(zones, nodes)
 	}
-	if len(nodes) == 0 {
-		return nil, errors.New("no TiKV nodes in the cluster, please check the topology file")
+
+	if err := checkDuplicate(zones); err != nil {
+		return nil, err
 	}
 
 	newTopo, err := common.ParseTiUPTopology(c.NewTopology)
@@ -110,7 +124,8 @@ func NewConfig(path string) (*Config, error) {
 		NewPlacementRules: c.NewPlacementRules,
 		ClusterName:       c.ClusterName,
 		User:              topo.GlobalOptions.User,
-		Nodes:             nodes,
+		Zones:             zones,
+		Labels:            c.ZoneLabels,
 		NewTopology: struct {
 			Path      string
 			PDServers []*spec.PDSpec
@@ -127,4 +142,17 @@ func NewConfig(path string) (*Config, error) {
 		},
 		PDRecoverPath: c.PDRecoverPath,
 	}, nil
+}
+
+func checkDuplicate(zones [][]*spec.TiKVSpec) error {
+	check := make(map[string]bool)
+	for _, zone := range zones {
+		for _, node := range zone {
+			if _, ok := check[node.Host]; ok {
+				return fmt.Errorf("duplicate host: %s" + node.Host)
+			}
+			check[node.Host] = true
+		}
+	}
+	return nil
 }
