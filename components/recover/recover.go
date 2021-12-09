@@ -48,7 +48,7 @@ type ClusterRescuer struct {
 }
 
 func NewClusterRescuer(config *Config) Recover {
-	return &ClusterRescuer{config: config, status: nop}
+	return &ClusterRescuer{config: config, status: statusNop}
 }
 
 func (r *ClusterRescuer) Prepare(ctx context.Context) error {
