@@ -21,7 +21,7 @@ var (
 			ctx := context.Background()
 			rescuer := recover.NewClusterRescuer(config)
 
-			for err = rescuer.Execute(ctx); err != recover.ErrRetryIsExhausted; err = rescuer.Retry(ctx) {
+			for err = rescuer.Execute(ctx); err != nil && err != recover.ErrRetryIsExhausted; err = rescuer.Retry(ctx) {
 			}
 			if err != nil {
 				log.Error(err)
