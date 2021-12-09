@@ -296,6 +296,47 @@ func (r *ClusterRescuer) Finish(ctx context.Context) error {
 		}
 	}
 
+	return r.cleanZones(ctx)
+}
+
+func (r *ClusterRescuer) cleanZones(ctx context.Context) error {
+	c := r.config
+	current := r.currentZoneIdx
+	for i := range c.Zones {
+		if i != current {
+			r.currentZoneIdx = i
+			err := r.cleanZone(ctx)
+			if err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func (r *ClusterRescuer) cleanZone(ctx context.Context) error {
+	c := r.config
+	err := r.Stop(ctx)
+	if err != nil {
+		return err
+	}
+	for _, node := range c.Zones[r.currentZoneIdx] {
+		cmd := &common.SSHCommand{
+			Port:         node.SSHPort,
+			User:         c.User,
+			Host:         node.Host,
+			ExtraSSHOpts: c.ExtraSSHOpts,
+			CommandName:  "rm",
+			Silent:       false,
+			Args: []string{
+				"-rf", node.DataDir, node.DeployDir,
+			},
+		}
+		_, err := cmd.Run(ctx)
+		if err != nil {
+			return err
+		}
+	}
 	return nil
 }
 

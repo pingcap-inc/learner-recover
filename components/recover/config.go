@@ -117,6 +117,41 @@ func NewConfig(path string) (*Config, error) {
 		sshArgs = strings.Split(c.ExtraSSHOpts, " ")
 	}
 
+	joinTopo, err := common.ParseTiUPTopology(c.JoinTopology)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, labels := range c.ZoneLabels {
+		var nodes []*spec.TiKVSpec
+		for _, tikv := range joinTopo.TiKVServers {
+			serverLabels, err := tikv.Labels()
+			if err != nil {
+				return nil, err
+			}
+			if common.IsLabelsMatch(labels, serverLabels) {
+				nodes = append(nodes, tikv)
+			}
+		}
+		if len(nodes) == 0 {
+			return nil, fmt.Errorf("no TiKV nodes in the join topology, please check the topology file, labels: %v", labels)
+		}
+
+		spec := &spec.Specification{TiKVServers: nodes}
+		data, err := yaml.Marshal(spec)
+		if err != nil {
+			return nil, err
+		}
+		zoneLabels := ""
+		for k, v := range labels {
+			zoneLabels += k + v
+		}
+		err = ioutil.WriteFile(zoneLabels, data, 0644)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	return &Config{
 		ClusterVersion:    c.ClusterVersion,
 		Patch:             c.Patch,
