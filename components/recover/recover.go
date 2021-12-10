@@ -278,6 +278,9 @@ func (r *ClusterRescuer) JoinTiKV(ctx context.Context) error {
 func (r *ClusterRescuer) CleanZones(ctx context.Context) error {
 	c := r.config
 	current := r.currentZoneIdx
+	defer func() {
+		r.currentZoneIdx = current
+	}()
 	for i := range c.Zones {
 		if i != current {
 			r.currentZoneIdx = i
@@ -287,7 +290,6 @@ func (r *ClusterRescuer) CleanZones(ctx context.Context) error {
 			}
 		}
 	}
-	r.currentZoneIdx = current
 	return nil
 }
 
@@ -342,7 +344,7 @@ func (r *ClusterRescuer) Retry(ctx context.Context) error {
 
 func (r *ClusterRescuer) cleanCluster(ctx context.Context) error {
 	c := r.config
-	_, err := common.TiUP(ctx, "cluster", "destroy", "-y", c.ClusterName)
+	_, err := common.TiUP(ctx, "cluster", "destroy", "-y", "--retain-role-data", "tikv", c.ClusterName)
 	return err
 }
 
