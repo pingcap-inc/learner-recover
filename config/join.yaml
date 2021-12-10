@@ -7,7 +7,7 @@ tikv_servers:
     log_dir: "/home/root/deploy/tikv/log"
     config:
       server.labels:
-        zone: backup
+        zone: backup0
         host: host0
 
   - host: 172.16.4.193
@@ -18,7 +18,7 @@ tikv_servers:
     log_dir: "/home/root/deploy/tikv-scale-0/log"
     config:
       server.labels:
-        zone: backup
+        zone: backup0
         host: host1
 
   - host: 172.16.4.193
@@ -29,5 +29,5 @@ tikv_servers:
     log_dir: "/home/root/deploy/tikv-scale-1/log"
     config:
       server.labels:
-        zone: backup
+        zone: backup1
         host: host2

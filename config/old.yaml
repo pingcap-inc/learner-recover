@@ -38,16 +38,16 @@ tikv_servers:
 
 
   # Learners
-  - host: 172.16.4.193
+  - host: 172.16.4.191
     deploy_dir: /home/root/deploy/tikv
     data_dir: /home/root/data/tikv
     log_dir: "/home/root/deploy/tikv/log"
     config:
       server.labels:
-        zone: backup
+        zone: backup0
         host: host0
 
-  - host: 172.16.4.193
+  - host: 172.16.4.192
     port: 20162
     status_port: 20182
     deploy_dir: /home/root/deploy/tikv-scale-0
@@ -55,7 +55,7 @@ tikv_servers:
     log_dir: "/home/root/deploy/tikv-scale-0/log"
     config:
       server.labels:
-        zone: backup
+        zone: backup0
         host: host1
 
   - host: 172.16.4.193
@@ -66,7 +66,7 @@ tikv_servers:
     log_dir: "/home/root/deploy/tikv-scale-1/log"
     config:
       server.labels:
-        zone: backup
+        zone: backup1
         host: host2
 
 monitoring_servers:

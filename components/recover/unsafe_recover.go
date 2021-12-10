@@ -18,16 +18,17 @@ import (
 func (r *ClusterRescuer) dropLogs(ctx context.Context) error {
 	config := r.config
 
-	ch := make(chan error, len(config.Nodes))
+	nodes := config.Zones[r.currentZoneIdx]
+	ch := make(chan error, len(nodes))
 
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
 	wg := &sync.WaitGroup{}
-	wg.Add(len(config.Nodes))
+	wg.Add(len(nodes))
 	defer wg.Wait()
 
-	for _, node := range config.Nodes {
+	for _, node := range nodes {
 		go func(node *spec.TiKVSpec) {
 			defer wg.Done()
 
@@ -49,7 +50,7 @@ func (r *ClusterRescuer) dropLogs(ctx context.Context) error {
 		}(node)
 	}
 
-	for i := 0; i < len(config.Nodes); i++ {
+	for i := 0; i < len(nodes); i++ {
 		if err := <-ch; err != nil {
 			return err
 		}
@@ -60,17 +61,18 @@ func (r *ClusterRescuer) dropLogs(ctx context.Context) error {
 
 func (r *ClusterRescuer) promoteLearner(ctx context.Context) error {
 	config := r.config
+	nodes := config.Zones[r.currentZoneIdx]
 
-	ch := make(chan error, len(config.Nodes))
+	ch := make(chan error, len(nodes))
 
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
 	wg := &sync.WaitGroup{}
-	wg.Add(len(config.Nodes))
+	wg.Add(len(nodes))
 	defer wg.Wait()
 
-	for _, node := range config.Nodes {
+	for _, node := range nodes {
 		go func(node *spec.TiKVSpec) {
 			defer wg.Done()
 
@@ -91,7 +93,7 @@ func (r *ClusterRescuer) promoteLearner(ctx context.Context) error {
 				return
 			}
 
-			storeIDStr := string(storeIDBytes)
+			storeIDStr := storeIDBytes
 			storeIDStr = strings.TrimPrefix(storeIDStr, "store id: ")
 			storeIDStr = strings.TrimSuffix(storeIDStr, "\n")
 
@@ -137,7 +139,7 @@ func (r *ClusterRescuer) promoteLearner(ctx context.Context) error {
 		}(node)
 	}
 
-	for _, node := range config.Nodes {
+	for _, node := range nodes {
 		if err := <-ch; err != nil {
 			log.Errorf("Fail to promote learners of TiKV server on %s:%v: %v", node.Host, node.Port, err)
 			return err
@@ -194,6 +196,7 @@ func (c *RemoteTiKVCtl) Fetch(ctx context.Context) (*common.RegionInfos, error) 
 
 func (r *ClusterRescuer) UnsafeRecover(ctx context.Context) error {
 	c := r.config
+	nodes := c.Zones[r.currentZoneIdx]
 
 	err := r.dropLogs(ctx)
 	if err != nil {
@@ -203,7 +206,7 @@ func (r *ClusterRescuer) UnsafeRecover(ctx context.Context) error {
 	collector := common.NewRegionCollector()
 
 	var fetchers []common.Fetcher
-	for _, node := range c.Nodes {
+	for _, node := range nodes {
 		fetcher := &RemoteTiKVCtl{
 			Controller:   c.TiKVCtl.Dest,
 			ExtraSSHOpts: c.ExtraSSHOpts,

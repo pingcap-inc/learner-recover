@@ -2,8 +2,8 @@ package recover
 
 import (
 	"context"
+	"errors"
 	"fmt"
-	"github.com/pingcap/tiup/pkg/cluster/spec"
 	"net/http"
 	"os/exec"
 	"strings"
@@ -11,18 +11,35 @@ import (
 	"time"
 
 	"github.com/iosmanthus/learner-recover/common"
+
+	"github.com/pingcap/tiup/pkg/cluster/spec"
 	log "github.com/sirupsen/logrus"
 	"gopkg.in/resty.v1"
+)
+
+var ErrRetryIsExhausted = errors.New("retry is exhausted")
+
+type status int
+
+const (
+	statusNop status = iota
+	statusNeedCleanCluster
+	statusPatch
+	statusApplyPlacementRule
 )
 
 type Recover interface {
 	UnsafeRecover
 
+	Retry(ctx context.Context) error
 	Execute(ctx context.Context) error
 	Prepare(ctx context.Context) error
 	Stop(ctx context.Context) error
 	RebuildPD(ctx context.Context) error
-	Finish(ctx context.Context) error
+	JoinTiKV(ctx context.Context) error
+	PatchCluster(ctx context.Context) error
+	ApplyNewPlacementRule(ctx context.Context) error
+	CleanZones(ctx context.Context) error
 }
 
 type UnsafeRecover interface {
@@ -30,26 +47,29 @@ type UnsafeRecover interface {
 }
 
 type ClusterRescuer struct {
-	config *Config
+	config         *Config
+	currentZoneIdx int
+	status
 }
 
 func NewClusterRescuer(config *Config) Recover {
-	return &ClusterRescuer{config}
+	return &ClusterRescuer{config: config, status: statusNop}
 }
 
 func (r *ClusterRescuer) Prepare(ctx context.Context) error {
 	config := r.config
+	nodes := config.Zones[r.currentZoneIdx]
 
-	ch := make(chan error, len(config.Nodes))
+	ch := make(chan error, len(nodes))
 
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
 	wg := &sync.WaitGroup{}
-	wg.Add(len(config.Nodes))
+	wg.Add(len(nodes))
 	defer wg.Wait()
 
-	for _, node := range config.Nodes {
+	for _, node := range nodes {
 		go func(node *spec.TiKVSpec) {
 			defer wg.Done()
 
@@ -69,7 +89,7 @@ func (r *ClusterRescuer) Prepare(ctx context.Context) error {
 		}(node)
 	}
 
-	for _, node := range config.Nodes {
+	for _, node := range nodes {
 		if err := <-ch; err != nil {
 			log.Errorf("Fail to send tikv-ctl to %s", node.Host)
 			return err
@@ -80,27 +100,28 @@ func (r *ClusterRescuer) Prepare(ctx context.Context) error {
 }
 
 func (r *ClusterRescuer) Stop(ctx context.Context) error {
-	config := r.config
+	c := r.config
+	nodes := c.Zones[r.currentZoneIdx]
 
-	ch := make(chan error, len(config.Nodes))
+	ch := make(chan error, len(nodes))
 
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
 	wg := &sync.WaitGroup{}
-	wg.Add(len(config.Nodes))
+	wg.Add(len(nodes))
 	defer wg.Wait()
 
-	for _, node := range config.Nodes {
+	for _, node := range nodes {
 		go func(node *spec.TiKVSpec) {
 			defer wg.Done()
 
 			log.Infof("Stoping TiKV server on %s:%v", node.Host, node.Port)
 			cmd := common.SSHCommand{
 				Port:         node.SSHPort,
-				User:         config.User,
+				User:         c.User,
 				Host:         node.Host,
-				ExtraSSHOpts: config.ExtraSSHOpts,
+				ExtraSSHOpts: c.ExtraSSHOpts,
 				CommandName:  "sudo",
 				Args: []string{
 					"systemctl", "disable", "--now", fmt.Sprintf("tikv-%v.service", node.Port),
@@ -111,7 +132,7 @@ func (r *ClusterRescuer) Stop(ctx context.Context) error {
 		}(node)
 	}
 
-	for _, node := range config.Nodes {
+	for _, node := range nodes {
 		if err := <-ch; err != nil {
 			log.Errorf("Fail to stop TiKV server on %s:%v: %v", node.Host, node.Port, err)
 			return err
@@ -190,7 +211,7 @@ func (r *ClusterRescuer) pdBootstrap(ctx context.Context) error {
 	return nil
 }
 
-func (r *ClusterRescuer) patchCluster(ctx context.Context) error {
+func (r *ClusterRescuer) PatchCluster(ctx context.Context) error {
 	c := r.config
 	_, err := common.TiUP(ctx, "cluster", "stop", "-y", c.ClusterName)
 	if err != nil {
@@ -210,7 +231,7 @@ func (r *ClusterRescuer) patchCluster(ctx context.Context) error {
 	return err
 }
 
-func (r *ClusterRescuer) applyNewPlacementRule(ctx context.Context) error {
+func (r *ClusterRescuer) ApplyNewPlacementRule(ctx context.Context) error {
 	c := r.config
 	pdServer := c.NewTopology.PDServers[0]
 
@@ -247,39 +268,91 @@ func (r *ClusterRescuer) applyNewPlacementRule(ctx context.Context) error {
 	return cmd.Run()
 }
 
-func (r *ClusterRescuer) joinTiKV(ctx context.Context) error {
+func (r *ClusterRescuer) JoinTiKV(ctx context.Context) error {
+	log.Info("Joining the TiKV servers")
 	c := r.config
-	_, err := common.TiUP(ctx, "cluster", "scale-out", "-y", c.ClusterName, c.JoinTopology)
+	_, err := common.TiUP(ctx, "cluster", "scale-out", "-y", c.ClusterName, c.JoinTopology[r.currentZoneIdx])
 	return err
 }
 
-func (r *ClusterRescuer) Finish(ctx context.Context) error {
+func (r *ClusterRescuer) CleanZones(ctx context.Context) error {
 	c := r.config
-
-	log.Info("Joining the TiKV servers")
-	if err := r.joinTiKV(ctx); err != nil {
-		return err
-	}
-
-	// Patch the cluster before finishing
-	if c.Patch != "" {
-		log.Info("Patching TiKV cluster")
-		if err := r.patchCluster(ctx); err != nil {
-			return err
+	current := r.currentZoneIdx
+	defer func() {
+		r.currentZoneIdx = current
+	}()
+	for i := range c.Zones {
+		if i != current {
+			r.currentZoneIdx = i
+			err := r.cleanZone(ctx)
+			if err != nil {
+				return err
+			}
 		}
 	}
-
-	if c.NewPlacementRules != "" {
-		log.Info("Apply placement rules")
-		if err := r.applyNewPlacementRule(ctx); err != nil {
-			return err
-		}
-	}
-
 	return nil
 }
 
+func (r *ClusterRescuer) cleanZone(ctx context.Context) error {
+	c := r.config
+	err := r.Stop(ctx)
+	if err != nil {
+		return err
+	}
+	for _, node := range c.Zones[r.currentZoneIdx] {
+		cmd := &common.SSHCommand{
+			Port:         node.SSHPort,
+			User:         c.User,
+			Host:         node.Host,
+			ExtraSSHOpts: c.ExtraSSHOpts,
+			CommandName:  "rm",
+			Silent:       false,
+			Args: []string{
+				"-rf", node.DataDir, node.DeployDir,
+			},
+		}
+		_, err := cmd.Run(ctx)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (r *ClusterRescuer) Retry(ctx context.Context) error {
+	c := r.config
+	r.currentZoneIdx++
+	if r.currentZoneIdx == len(c.Zones) {
+		return ErrRetryIsExhausted
+	}
+	log.Warnf("Retrying to recover another zone: %v", common.StringifyLabels(c.Labels[r.currentZoneIdx]))
+	switch r.status {
+	case statusNop:
+	case statusPatch:
+		log.Error("Fail to patch the cluster, please manually patch the cluster!")
+	case statusApplyPlacementRule:
+		log.Errorf("Fail to apply initial placement rules, please check the rules: %v", c.NewPlacementRules)
+	case statusNeedCleanCluster:
+		err := r.cleanCluster(ctx)
+		if err != nil {
+			log.Error("fail to clean last recover environment")
+			return err
+		}
+	}
+	return nil
+}
+
+func (r *ClusterRescuer) cleanCluster(ctx context.Context) error {
+	c := r.config
+	_, err := common.TiUP(ctx, "cluster", "destroy", "-y", "--retain-role-data", "tikv", c.ClusterName)
+	return err
+}
+
 func (r *ClusterRescuer) Execute(ctx context.Context) error {
+	c := r.config
+	log.Warnf("Recovering zone: %s", common.StringifyLabels(c.Labels[r.currentZoneIdx]))
+
+	r.status = statusNop
 	err := r.Prepare(ctx)
 	if err != nil {
 		log.Error("Fail to prepare tikv-ctl for TiKV learner nodes")
@@ -298,11 +371,37 @@ func (r *ClusterRescuer) Execute(ctx context.Context) error {
 		return err
 	}
 
+	r.status = statusNeedCleanCluster
 	err = r.RebuildPD(ctx)
 	if err != nil {
 		log.Error("Fail to rebuild PD")
 		return err
 	}
 
-	return r.Finish(ctx)
+	if err := r.JoinTiKV(ctx); err != nil {
+		return err
+	}
+
+	if c.Patch != "" {
+		r.status = statusPatch
+		log.Info("Patching TiKV cluster")
+		if err := r.PatchCluster(ctx); err != nil {
+			return err
+		}
+	}
+
+	if c.NewPlacementRules != "" {
+		r.status = statusApplyPlacementRule
+		log.Info("Apply placement rules")
+		if err := r.ApplyNewPlacementRule(ctx); err != nil {
+			return err
+		}
+	}
+
+	log.Info("Cleaning failed zones")
+	err = r.CleanZones(ctx)
+	if err != nil {
+		log.Error("fail to clean failed zones! Please clean the zones manually.")
+	}
+	return nil
 }

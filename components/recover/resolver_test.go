@@ -204,4 +204,14 @@ func TestFromFile(t *testing.T) {
 	resolved, err := resolver.TryResolve()
 	assert.Nil(t, err)
 	assertFullRange(t, resolved)
+
+	for _, conflict := range resolver.conflicts {
+		for _, region := range resolved {
+			startKey := region.LocalState.Region.StartKey
+			endKey := region.LocalState.Region.EndKey
+			if startKey <= conflict.LocalState.Region.StartKey && (endKey == "" || endKey >= conflict.LocalState.Region.EndKey) {
+				t.Logf("removed region: %s is conflicted with:\n %s", spew.Sdump(conflict), spew.Sdump(region))
+			}
+		}
+	}
 }
