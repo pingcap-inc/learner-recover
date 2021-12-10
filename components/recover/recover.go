@@ -363,13 +363,13 @@ func (r *ClusterRescuer) Execute(ctx context.Context) error {
 		return err
 	}
 
-	r.status = statusNeedCleanCluster
 	err = r.UnsafeRecover(ctx)
 	if err != nil {
 		log.Error("Fail to recover the TiKV servers")
 		return err
 	}
 
+	r.status = statusNeedCleanCluster
 	err = r.RebuildPD(ctx)
 	if err != nil {
 		log.Error("Fail to rebuild PD")
