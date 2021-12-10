@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io/ioutil"
+	"path/filepath"
 	"strings"
 
 	"github.com/iosmanthus/learner-recover/common"
@@ -144,7 +145,8 @@ func NewConfig(path string) (*Config, error) {
 			return nil, err
 		}
 
-		filename := "join-" + common.StringifyLabels(labels) + ".yaml"
+		baseDir := filepath.Dir(c.JoinTopology)
+		filename := baseDir + "/join-" + common.StringifyLabels(labels) + ".yaml"
 		err = ioutil.WriteFile(filename, data, 0644)
 		if err != nil {
 			return nil, err
