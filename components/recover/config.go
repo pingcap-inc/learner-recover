@@ -143,11 +143,8 @@ func NewConfig(path string) (*Config, error) {
 		if err != nil {
 			return nil, err
 		}
-		zoneLabels := "join-"
-		for k, v := range labels {
-			zoneLabels += k + "-" + v
-		}
-		filename := zoneLabels + ".yaml"
+
+		filename := "join-" + common.StringifyLabels(labels) + ".yaml"
 		err = ioutil.WriteFile(filename, data, 0644)
 		if err != nil {
 			return nil, err

@@ -9,6 +9,14 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+func StringifyLabels(labels map[string]string) string {
+	s := ""
+	for k, v := range labels {
+		s += k + "-" + v
+	}
+	return s
+}
+
 func IsLabelsMatch(labels map[string]string, match map[string]string) bool {
 	for k, v := range labels {
 		if get, ok := match[k]; !ok || get != v {

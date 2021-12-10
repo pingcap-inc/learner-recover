@@ -31,12 +31,15 @@ const (
 type Recover interface {
 	UnsafeRecover
 
+	Retry(ctx context.Context) error
 	Execute(ctx context.Context) error
 	Prepare(ctx context.Context) error
 	Stop(ctx context.Context) error
 	RebuildPD(ctx context.Context) error
-	Finish(ctx context.Context) error
-	Retry(ctx context.Context) error
+	JoinTiKV(ctx context.Context) error
+	PatchCluster(ctx context.Context) error
+	ApplyNewPlacementRule(ctx context.Context) error
+	CleanZones(ctx context.Context) error
 }
 
 type UnsafeRecover interface {
@@ -208,7 +211,7 @@ func (r *ClusterRescuer) pdBootstrap(ctx context.Context) error {
 	return nil
 }
 
-func (r *ClusterRescuer) patchCluster(ctx context.Context) error {
+func (r *ClusterRescuer) PatchCluster(ctx context.Context) error {
 	c := r.config
 	_, err := common.TiUP(ctx, "cluster", "stop", "-y", c.ClusterName)
 	if err != nil {
@@ -228,7 +231,7 @@ func (r *ClusterRescuer) patchCluster(ctx context.Context) error {
 	return err
 }
 
-func (r *ClusterRescuer) applyNewPlacementRule(ctx context.Context) error {
+func (r *ClusterRescuer) ApplyNewPlacementRule(ctx context.Context) error {
 	c := r.config
 	pdServer := c.NewTopology.PDServers[0]
 
@@ -265,41 +268,14 @@ func (r *ClusterRescuer) applyNewPlacementRule(ctx context.Context) error {
 	return cmd.Run()
 }
 
-func (r *ClusterRescuer) joinTiKV(ctx context.Context) error {
+func (r *ClusterRescuer) JoinTiKV(ctx context.Context) error {
+	log.Info("Joining the TiKV servers")
 	c := r.config
 	_, err := common.TiUP(ctx, "cluster", "scale-out", "-y", c.ClusterName, c.JoinTopology[r.currentZoneIdx])
 	return err
 }
 
-func (r *ClusterRescuer) Finish(ctx context.Context) error {
-	c := r.config
-
-	log.Info("Joining the TiKV servers")
-	if err := r.joinTiKV(ctx); err != nil {
-		return err
-	}
-
-	// Patch the cluster before finishing
-	if c.Patch != "" {
-		r.status = statusPatch
-		log.Info("Patching TiKV cluster")
-		if err := r.patchCluster(ctx); err != nil {
-			return err
-		}
-	}
-
-	if c.NewPlacementRules != "" {
-		r.status = statusApplyPlacementRule
-		log.Info("Apply placement rules")
-		if err := r.applyNewPlacementRule(ctx); err != nil {
-			return err
-		}
-	}
-
-	return r.cleanZones(ctx)
-}
-
-func (r *ClusterRescuer) cleanZones(ctx context.Context) error {
+func (r *ClusterRescuer) CleanZones(ctx context.Context) error {
 	c := r.config
 	current := r.currentZoneIdx
 	for i := range c.Zones {
@@ -371,8 +347,9 @@ func (r *ClusterRescuer) cleanCluster(ctx context.Context) error {
 
 func (r *ClusterRescuer) Execute(ctx context.Context) error {
 	c := r.config
-	log.Warnf("Recovering zone: %v", c.Labels[r.currentZoneIdx])
+	log.Warnf("Recovering zone: %s", common.StringifyLabels(c.Labels[r.currentZoneIdx]))
 
+	r.status = statusNop
 	err := r.Prepare(ctx)
 	if err != nil {
 		log.Error("Fail to prepare tikv-ctl for TiKV learner nodes")
@@ -385,18 +362,38 @@ func (r *ClusterRescuer) Execute(ctx context.Context) error {
 		return err
 	}
 
+	r.status = statusNeedCleanCluster
 	err = r.UnsafeRecover(ctx)
 	if err != nil {
 		log.Error("Fail to recover the TiKV servers")
 		return err
 	}
 
-	r.status = statusNeedCleanCluster
 	err = r.RebuildPD(ctx)
 	if err != nil {
 		log.Error("Fail to rebuild PD")
 		return err
 	}
 
-	return r.Finish(ctx)
+	if err := r.JoinTiKV(ctx); err != nil {
+		return err
+	}
+
+	if c.Patch != "" {
+		r.status = statusPatch
+		log.Info("Patching TiKV cluster")
+		if err := r.PatchCluster(ctx); err != nil {
+			return err
+		}
+	}
+
+	if c.NewPlacementRules != "" {
+		r.status = statusApplyPlacementRule
+		log.Info("Apply placement rules")
+		if err := r.ApplyNewPlacementRule(ctx); err != nil {
+			return err
+		}
+	}
+
+	return r.CleanZones(ctx)
 }
