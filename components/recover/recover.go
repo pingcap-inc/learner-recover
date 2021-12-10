@@ -322,7 +322,7 @@ func (r *ClusterRescuer) Retry(ctx context.Context) error {
 	if r.currentZoneIdx == len(c.Zones) {
 		return ErrRetryIsExhausted
 	}
-	log.Warnf("Retrying to recover another zone: %v", c.Labels[r.currentZoneIdx])
+	log.Warnf("Retrying to recover another zone: %v", common.StringifyLabels(c.Labels[r.currentZoneIdx]))
 	switch r.status {
 	case statusNop:
 	case statusPatch:
