@@ -100,8 +100,8 @@ func (r *ClusterRescuer) Prepare(ctx context.Context) error {
 }
 
 func (r *ClusterRescuer) Stop(ctx context.Context) error {
-	config := r.config
-	nodes := config.Zones[r.currentZoneIdx]
+	c := r.config
+	nodes := c.Zones[r.currentZoneIdx]
 
 	ch := make(chan error, len(nodes))
 
@@ -119,9 +119,9 @@ func (r *ClusterRescuer) Stop(ctx context.Context) error {
 			log.Infof("Stoping TiKV server on %s:%v", node.Host, node.Port)
 			cmd := common.SSHCommand{
 				Port:         node.SSHPort,
-				User:         config.User,
+				User:         c.User,
 				Host:         node.Host,
-				ExtraSSHOpts: config.ExtraSSHOpts,
+				ExtraSSHOpts: c.ExtraSSHOpts,
 				CommandName:  "sudo",
 				Args: []string{
 					"systemctl", "disable", "--now", fmt.Sprintf("tikv-%v.service", node.Port),
@@ -287,6 +287,7 @@ func (r *ClusterRescuer) CleanZones(ctx context.Context) error {
 			}
 		}
 	}
+	r.currentZoneIdx = current
 	return nil
 }
 
