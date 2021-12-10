@@ -397,5 +397,9 @@ func (r *ClusterRescuer) Execute(ctx context.Context) error {
 	}
 
 	log.Info("Cleaning failed zones")
-	return r.CleanZones(ctx)
+	err = r.CleanZones(ctx)
+	if err != nil {
+		log.Error("fail to clean failed zones! Please clean the zones manually.")
+	}
+	return nil
 }
