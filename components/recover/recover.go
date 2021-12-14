@@ -4,6 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	prom "github.com/prometheus/client_golang/api"
+	v1 "github.com/prometheus/client_golang/api/prometheus/v1"
+	"github.com/prometheus/common/model"
 	"net/http"
 	"os/exec"
 	"strings"
@@ -40,6 +43,7 @@ type Recover interface {
 	PatchCluster(ctx context.Context) error
 	ApplyNewPlacementRule(ctx context.Context) error
 	CleanZones(ctx context.Context) error
+	WaitRulesFit(ctx context.Context) error
 }
 
 type UnsafeRecover interface {
@@ -348,6 +352,51 @@ func (r *ClusterRescuer) cleanCluster(ctx context.Context) error {
 	return err
 }
 
+func (r *ClusterRescuer) WaitRulesFit(ctx context.Context) error {
+	config := r.config
+	if !config.WaitRulesFit {
+		return nil
+	}
+
+	monitor := config.NewTopology.Monitors[0]
+	client, err := prom.NewClient(prom.Config{
+		Address: fmt.Sprintf("http://%s:%v", monitor.Host, monitor.Port),
+	})
+	if err != nil {
+		return err
+	}
+
+	api := v1.NewAPI(client)
+	for {
+		result, _, err := api.Query(ctx, "pd_regions_status{type='miss-peer-region-count'}[1m]", time.Now())
+		if err != nil {
+			return err
+		}
+		metrics, ok := result.(model.Matrix)
+		if !ok {
+			return errors.New("expected query result is Matrix type")
+		}
+
+		if metrics.Len() == 0 || len(metrics[0].Values) < 4 {
+			log.Info("Waiting for monitor nodes ready")
+			time.Sleep(time.Second * 1)
+			continue
+		}
+
+		log.Info("Waiting replicas fit")
+		var cnt int64
+		for _, m := range metrics[0].Values {
+			cnt += int64(m.Value)
+		}
+
+		if cnt == 0 {
+			break
+		}
+		time.Sleep(time.Second * 1)
+	}
+	return nil
+}
+
 func (r *ClusterRescuer) Execute(ctx context.Context) error {
 	c := r.config
 	log.Warnf("Recovering zone: %s", common.StringifyLabels(c.Labels[r.currentZoneIdx]))
@@ -403,5 +452,7 @@ func (r *ClusterRescuer) Execute(ctx context.Context) error {
 	if err != nil {
 		log.Error("fail to clean failed zones! Please clean the zones manually.")
 	}
-	return nil
+
+	log.Info("Waiting placement rules fits")
+	return r.WaitRulesFit(ctx)
 }
