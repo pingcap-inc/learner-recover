@@ -9,7 +9,7 @@ all: build
 build:
 	go build -ldflags \
 		"-X ${GOMOD}/version.GitCommit=$(GIT_COMMIT) \
-		-X ${GOMOD}/version.Version=2.1.3"
+		-X ${GOMOD}/version.Version=2.1.4"
 
 	@sha256sum learner-recover > sha256sum
 	@md5sum learner-recover > md5sum

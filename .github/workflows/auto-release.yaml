@@ -29,3 +29,4 @@ jobs:
           files: |
             learner-recover.tar.gz
             sha256sum
+            md5sum
