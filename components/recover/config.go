@@ -10,6 +10,7 @@ import (
 	"github.com/iosmanthus/learner-recover/common"
 
 	"github.com/pingcap/tiup/pkg/cluster/spec"
+	log "github.com/sirupsen/logrus"
 	"gopkg.in/yaml.v3"
 )
 
@@ -154,6 +155,7 @@ func NewConfig(path string) (*Config, error) {
 
 		baseDir := "/tmp"
 		filename := baseDir + "/join-" + common.StringifyLabels(labels) + ".yaml"
+		log.Infof("Genrerating join topology: %v for %v", filename, common.StringifyLabels(labels))
 		err = ioutil.WriteFile(filename, data, 0644)
 		if err != nil {
 			return nil, err
