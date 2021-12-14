@@ -10,10 +10,12 @@ import (
 	"github.com/iosmanthus/learner-recover/common"
 
 	"github.com/pingcap/tiup/pkg/cluster/spec"
+	log "github.com/sirupsen/logrus"
 	"gopkg.in/yaml.v3"
 )
 
 type Config struct {
+	WaitRulesFit   bool
 	ClusterVersion string
 	Patch          string
 	ClusterName    string
@@ -24,6 +26,7 @@ type Config struct {
 	NewTopology    struct {
 		Path      string
 		PDServers []*spec.PDSpec
+		Monitors  []*spec.PrometheusSpec
 	}
 	NewPlacementRules string
 	PDBootstrap       []string
@@ -38,6 +41,7 @@ type Config struct {
 
 func NewConfig(path string) (*Config, error) {
 	type _Config struct {
+		WaitRulesFit      bool                `yaml:"wait-rules-fit"`
 		ClusterVersion    string              `yaml:"cluster-version"`
 		ExtraSSHOpts      string              `yaml:"extra-ssh-opts"`
 		Patch             string              `yaml:"patch"`
@@ -111,6 +115,11 @@ func NewConfig(path string) (*Config, error) {
 	if err != nil {
 		return nil, err
 	}
+	if len(newTopo.PDServers) == 0 {
+		return nil, errors.New("no PD nodes in the new cluster, please check the topology file")
+	} else if len(newTopo.Monitors) == 0 {
+		return nil, errors.New("no monitor nodes in the new cluster, please check the topology file")
+	}
 
 	var sshArgs []string
 	if c.ExtraSSHOpts != "" {
@@ -146,6 +155,7 @@ func NewConfig(path string) (*Config, error) {
 
 		baseDir := "/tmp"
 		filename := baseDir + "/join-" + common.StringifyLabels(labels) + ".yaml"
+		log.Infof("Genrerating join topology: %v for %v", filename, common.StringifyLabels(labels))
 		err = ioutil.WriteFile(filename, data, 0644)
 		if err != nil {
 			return nil, err
@@ -154,6 +164,7 @@ func NewConfig(path string) (*Config, error) {
 	}
 
 	return &Config{
+		WaitRulesFit:      c.WaitRulesFit,
 		ClusterVersion:    c.ClusterVersion,
 		Patch:             c.Patch,
 		ExtraSSHOpts:      sshArgs,
@@ -165,7 +176,8 @@ func NewConfig(path string) (*Config, error) {
 		NewTopology: struct {
 			Path      string
 			PDServers []*spec.PDSpec
-		}{c.NewTopology, newTopo.PDServers},
+			Monitors  []*spec.PrometheusSpec
+		}{c.NewTopology, newTopo.PDServers, newTopo.Monitors},
 		JoinTopology:    joinFiles,
 		RecoverInfoFile: info,
 		PDBootstrap:     c.PDBootstrap,
