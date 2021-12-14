@@ -6,3 +6,4 @@ learner-recover
 /dist
 /config/recover-info.json
 /sha256sum
+/md5sum
