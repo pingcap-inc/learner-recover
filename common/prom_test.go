@@ -1,18 +1,19 @@
-package transfer
+package common
 
 import (
 	"context"
 	"flag"
 	"fmt"
+	"net/http"
+	"testing"
+	"time"
+
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/prometheus/common/model"
 	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
-	"net/http"
-	"testing"
-	"time"
 )
 
 const (
@@ -87,7 +88,7 @@ func (s *waitConditionSuite) SetupTest() {
 
 func (s *waitConditionSuite) TestWaitConditionCountDown() {
 	ctx := context.Background()
-	api, err := newPromApi(*promAddr)
+	api, err := NewPromApi(*promAddr)
 	assert.Nil(s.T(), err)
 
 	done := make(chan struct{}, 1)
@@ -97,7 +98,7 @@ func (s *waitConditionSuite) TestWaitConditionCountDown() {
 	i := 0
 	promQL := fmt.Sprintf("recover_test_countdown{type=\"%s\"}", label)
 	go func() {
-		waitCondition(ctx, api, promQL, func(vector model.Vector) bool {
+		WaitCondition(ctx, api, promQL, func(vector model.Vector) bool {
 			log.Infof("i: %v", i)
 			log.Infof("samples: %s", vector.String())
 			if vector[0].Value == 0 {
@@ -120,7 +121,7 @@ func (s *waitConditionSuite) TestWaitConditionCountDown() {
 
 func (s *waitConditionSuite) TestWaitConditionAlwaysZero() {
 	ctx := context.Background()
-	api, err := newPromApi(*promAddr)
+	api, err := NewPromApi(*promAddr)
 	assert.Nil(s.T(), err)
 
 	done := make(chan struct{}, 1)
@@ -130,7 +131,7 @@ func (s *waitConditionSuite) TestWaitConditionAlwaysZero() {
 	i := 0
 	promQL := fmt.Sprintf("recover_test_always_zero{type=\"%s\"}", label)
 	go func() {
-		waitCondition(ctx, api, promQL, func(vector model.Vector) bool {
+		WaitCondition(ctx, api, promQL, func(vector model.Vector) bool {
 			log.Infof("i: %v", i)
 			log.Infof("samples: %s", vector.String())
 			if vector[0].Value == 0 {

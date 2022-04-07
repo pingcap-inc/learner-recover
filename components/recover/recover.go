@@ -4,8 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	prom "github.com/prometheus/client_golang/api"
-	v1 "github.com/prometheus/client_golang/api/prometheus/v1"
 	"github.com/prometheus/common/model"
 	"net/http"
 	"os/exec"
@@ -359,41 +357,18 @@ func (r *ClusterRescuer) WaitRulesFit(ctx context.Context) error {
 	}
 
 	monitor := config.NewTopology.Monitors[0]
-	client, err := prom.NewClient(prom.Config{
-		Address: fmt.Sprintf("http://%s:%v", monitor.Host, monitor.Port),
-	})
+	addr := fmt.Sprintf("http://%s:%v", monitor.Host, monitor.Port)
+	api, err := common.NewPromApi(addr)
 	if err != nil {
 		return err
 	}
 
-	api := v1.NewAPI(client)
-	for {
-		result, _, err := api.Query(ctx, "pd_regions_status{type='miss-peer-region-count'}[1m]", time.Now())
-		if err != nil {
-			return err
-		}
-		metrics, ok := result.(model.Matrix)
-		if !ok {
-			return errors.New("expected query result is Matrix type")
-		}
-
-		if metrics.Len() == 0 || len(metrics[0].Values) < 4 {
-			log.Info("Waiting for monitor nodes ready")
-			time.Sleep(time.Second * 1)
-			continue
-		}
-
+	promQL := "pd_regions_status{type='miss-peer-region-count'}"
+	common.WaitCondition(ctx, api, promQL, func(vector model.Vector) bool {
+		return vector[0].Value == 0
+	}, func(vector model.Vector) {
 		log.Info("Waiting replicas fit")
-		var cnt int64
-		for _, m := range metrics[0].Values {
-			cnt += int64(m.Value)
-		}
-
-		if cnt == 0 {
-			break
-		}
-		time.Sleep(time.Second * 1)
-	}
+	})
 	return nil
 }
 
