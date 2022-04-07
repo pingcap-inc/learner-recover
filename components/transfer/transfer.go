@@ -48,7 +48,9 @@ func newPromApi(promAddr string) (v1.API, error) {
 }
 
 func waitCondition(ctx context.Context, api v1.API, promQL string, hit func(vector model.Vector) bool, miss func(vector model.Vector)) {
-	for {
+	i := 0
+	promQL = fmt.Sprintf("sum(rate(%s[1m]))", promQL)
+	for i < 4 {
 		value, _, err := api.Query(ctx, promQL, time.Now())
 		if err != nil {
 			log.Errorf("Fail to fetch metrics: %v", err)
@@ -57,11 +59,11 @@ func waitCondition(ctx context.Context, api v1.API, promQL string, hit func(vect
 
 		if samples, ok := value.(model.Vector); ok && len(samples) > 0 {
 			if hit(samples) {
-				break
+				i++
 			}
 			miss(samples)
 		}
 
-		time.Sleep(time.Second * 5)
+		time.Sleep(time.Second * 15)
 	}
 }

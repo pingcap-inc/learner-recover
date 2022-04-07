@@ -20,12 +20,6 @@ func (a Action) TransferLeader(ctx context.Context) error {
 
 	promQL := "pd_regions_status{type=\"extra-peer-region-count\"}"
 	waitCondition(ctx, api, promQL, func(vector model.Vector) bool {
-		return vector[0].Value != 0
-	}, func(vector model.Vector) {
-		log.Info("Waiting for placement rules be applied")
-	})
-
-	waitCondition(ctx, api, promQL, func(vector model.Vector) bool {
 		return vector[0].Value == 0
 	}, func(vector model.Vector) {
 		log.Info("Waiting for transfer leader complete")
