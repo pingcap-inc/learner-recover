@@ -41,7 +41,7 @@ func (r *ClusterRescuer) dropLogs(ctx context.Context) error {
 				ExtraSSHOpts: config.ExtraSSHOpts,
 				CommandName:  config.TiKVCtl.Dest,
 				Args: []string{
-					"--db", path, "unsafe-recover", "drop-unapplied-raftlog", "--all-regions",
+					"--data-dir", path, "unsafe-recover", "drop-unapplied-raftlog", "--all-regions",
 				},
 			}
 
@@ -84,7 +84,7 @@ func (r *ClusterRescuer) promoteLearner(ctx context.Context) error {
 				ExtraSSHOpts: config.ExtraSSHOpts,
 				CommandName:  config.TiKVCtl.Dest,
 				Args: []string{
-					"--db", path, "store",
+					"--data-dir", path, "store",
 				},
 			}
 			storeIDBytes, err := cmd.Run(ctx)
@@ -129,7 +129,7 @@ func (r *ClusterRescuer) promoteLearner(ctx context.Context) error {
 				ExtraSSHOpts: config.ExtraSSHOpts,
 				CommandName:  config.TiKVCtl.Dest,
 				Args: []string{
-					"--db", path, "unsafe-recover",
+					"--data-dir", path, "unsafe-recover",
 					"remove-fail-stores", "--promote-learner", "--all-regions", "-s", stores,
 				},
 			}
@@ -168,7 +168,7 @@ func (c *RemoteTiKVCtl) Fetch(ctx context.Context) (*common.RegionInfos, error) 
 		ExtraSSHOpts: c.ExtraSSHOpts,
 		CommandName:  c.Controller,
 		Args: []string{
-			"--db", fmt.Sprintf("%s/db", c.DataDir), "raft", "region", "--all-regions",
+			"--data-dir", fmt.Sprintf("%s/db", c.DataDir), "raft", "region", "--all-regions",
 		},
 	}
 

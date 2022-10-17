@@ -42,7 +42,7 @@ func (r *Resolver) ResolveConflicts(ctx context.Context, c *Config) error {
 			ExtraSSHOpts: c.ExtraSSHOpts,
 			CommandName:  c.TiKVCtl.Dest,
 			Args: []string{
-				"--db", fmt.Sprintf("%s/db", conflict.DataDir), "tombstone", "--force", "-r", s,
+				"--data-dir", fmt.Sprintf("%s/db", conflict.DataDir), "tombstone", "--force", "-r", s,
 			},
 		}
 
